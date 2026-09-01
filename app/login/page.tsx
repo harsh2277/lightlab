@@ -110,31 +110,6 @@ export default function LoginPage() {
         </p>
       }
     >
-      {/* Quick Demo Login Auto-fill buttons */}
-      <div className="mb-6 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => { setEmail('admin@gmail.com'); setPassword('admin123'); }}
-          className="px-2.5 py-1 text-xs font-medium text-neutral-700 bg-neutral-100 border border-neutral-200 rounded hover:bg-neutral-200 transition-all cursor-pointer"
-        >
-          🔑 Admin
-        </button>
-        <button
-          type="button"
-          onClick={() => { setEmail('design@gmail.com'); setPassword('design123'); }}
-          className="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded hover:bg-amber-100 transition-all cursor-pointer"
-        >
-          🔑 Architect
-        </button>
-        <button
-          type="button"
-          onClick={() => { setEmail('designer@gmail.com'); setPassword('design123'); }}
-          className="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded hover:bg-amber-100 transition-all cursor-pointer"
-        >
-          🔑 Designer
-        </button>
-      </div>
-
       {errorMsg && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md flex items-start space-x-3 text-red-800 text-sm">
           <i className="bx bx-error-circle text-lg text-red-600 flex-shrink-0" />
