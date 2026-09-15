@@ -16,7 +16,6 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
@@ -46,10 +45,6 @@ export default function SignupPage() {
 
     if (password.length < 8) {
       setErrorMsg('Password must be at least 8 characters long.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setErrorMsg('Passwords do not match.');
       return;
     }
     if (!agreed) {
