@@ -136,6 +136,10 @@ export default function DesignerProjectDetail({ params }: PageProps) {
   }, [id]);
 
   const handleStatusChange = async (newStatus: string) => {
+    if ((project?.payment_status || 'pending') !== 'paid' && project?.status !== 'Approved' && project?.status !== 'Closed') {
+      setActionMessage('Error: Payment Pending - do not process further until payment is verified.');
+      return;
+    }
     setUpdatingStatus(true);
     setActionMessage('');
     try {
@@ -178,6 +182,11 @@ export default function DesignerProjectDetail({ params }: PageProps) {
     e.preventDefault();
     if (!designerNotes.trim()) return;
 
+    if ((project?.payment_status || 'pending') !== 'paid' && project?.status !== 'Approved' && project?.status !== 'Closed') {
+      setActionMessage('Error: Payment Pending - do not process further until payment is verified.');
+      return;
+    }
+
     setSubmittingRevision(true);
     setActionMessage('');
 
@@ -213,6 +222,11 @@ export default function DesignerProjectDetail({ params }: PageProps) {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) return;
+
+    if ((project?.payment_status || 'pending') !== 'paid' && project?.status !== 'Approved' && project?.status !== 'Closed') {
+      setActionMessage('Error: Payment Pending - do not process further. Deliverables cannot be uploaded until payment is confirmed.');
+      return;
+    }
 
     setUploading(true);
     setActionMessage('');
@@ -402,6 +416,21 @@ export default function DesignerProjectDetail({ params }: PageProps) {
       {/* Main Section */}
       <main className="flex-1 overflow-y-auto p-4 bg-neutral-50/70">
         <div className="content-container">
+
+          {/* Payment Pending Alert Banner for Designer */}
+          {((project?.payment_status || 'pending') !== 'paid' && project?.status !== 'Approved' && project?.status !== 'Closed') && (
+            <div className="mb-4 bg-amber-50 border-2 border-amber-300 rounded-md p-4 flex items-start space-x-3.5 shadow-xs">
+              <div className="w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center flex-shrink-0">
+                <i className="bx bx-time-five text-xl"></i>
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-amber-900">Payment Pending — Do Not Process Further</h4>
+                <p className="text-xs text-amber-800 font-medium mt-0.5">
+                  Payment for this project is currently pending. Deliverables upload, design work, and workflow progression are on hold until payment is confirmed by admin.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Action Message Banner */}
           {actionMessage && (
@@ -601,6 +630,13 @@ export default function DesignerProjectDetail({ params }: PageProps) {
                         <span>Upload Design Deliverable Asset</span>
                       </h4>
 
+                      {((project?.payment_status || 'pending') !== 'paid' && project?.status !== 'Approved' && project?.status !== 'Closed') && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900 font-semibold flex items-center gap-2">
+                          <i className="bx bx-time-five text-base text-amber-600"></i>
+                          <span>Payment Pending — Do not process further. Deliverables cannot be uploaded until payment is confirmed.</span>
+                        </div>
+                      )}
+
                       <form onSubmit={handleUpload} className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
                         <div className="sm:col-span-4">
                           <label className="block text-xs font-semibold text-neutral-400 tracking-wide mb-1.5">
@@ -627,15 +663,17 @@ export default function DesignerProjectDetail({ params }: PageProps) {
                             id="file-input"
                             type="file"
                             required
+                            disabled={((project?.payment_status || 'pending') !== 'paid' && project?.status !== 'Approved' && project?.status !== 'Closed')}
                             onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                            className="w-full text-xs text-neutral-700 bg-white border border-neutral-200 rounded-md p-1.5 focus:outline-none file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-neutral-900 file:text-white hover:file:bg-neutral-800 transition-colors"
+                            className="w-full text-xs text-neutral-700 bg-white border border-neutral-200 rounded-md p-1.5 focus:outline-none file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-neutral-900 file:text-white hover:file:bg-neutral-800 transition-colors disabled:opacity-50"
                           />
                         </div>
 
                         <div className="sm:col-span-3">
                           <button
                             type="submit"
-                            disabled={uploading || !selectedFile}
+                            disabled={uploading || !selectedFile || ((project?.payment_status || 'pending') !== 'paid' && project?.status !== 'Approved' && project?.status !== 'Closed')}
+                            title={((project?.payment_status || 'pending') !== 'paid' && project?.status !== 'Approved' && project?.status !== 'Closed') ? 'Payment Pending - do not process further.' : 'Upload Asset'}
                             className="w-full py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs rounded-md transition-colors flex items-center justify-center space-x-1.5 active:scale-[0.98] cursor-pointer"
                           >
                             {uploading ? (

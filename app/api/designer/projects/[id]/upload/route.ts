@@ -25,6 +25,20 @@ export async function POST(
       return Response.json({ error: 'File and category are required' }, { status: 400 });
     }
 
+    // Enforce "Payment Pending - do not process further"
+    const { data: proj } = await adminClient
+      .from('projects')
+      .select('payment_status')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (proj && proj.payment_status !== 'paid') {
+      return Response.json(
+        { error: 'Payment Pending - do not process further. Deliverables cannot be uploaded until payment is confirmed.' },
+        { status: 400 }
+      );
+    }
+
     // Upload file to Supabase storage
     const fileExt = file.name.split('.').pop();
     const filePath = `deliverables/${id}/${category}-${Date.now()}.${fileExt}`;

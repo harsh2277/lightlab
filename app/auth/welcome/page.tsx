@@ -27,7 +27,7 @@ function WelcomeContent() {
 
   return (
     <AuthWelcome
-      title={firstName ? `Welcome, ${firstName}!` : 'Welcome to LightMap!'}
+      title={firstName ? `Welcome, ${firstName}!` : 'Welcome to Lightmaps!'}
       subtitle="You're signed in. Taking you to your dashboard..."
     />
   );

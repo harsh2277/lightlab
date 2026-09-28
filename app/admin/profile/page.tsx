@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import { useToast, SkeletonProfile } from '@/components/ui';
+import PasswordInput from '@/components/ui/PasswordInput';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -22,6 +23,9 @@ export default function ProfilePage() {
 
   const [name, setName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
   const { success: toastSuccess, error: toastError } = useToast();
 
   useEffect(() => {
@@ -84,10 +88,38 @@ export default function ProfilePage() {
     }
   };
 
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 8) {
+      toastError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toastError('Passwords do not match. Please re-enter.');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (error) throw error;
+      toastSuccess('Password updated successfully!');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      console.error('Error changing password:', err);
+      toastError(err.message || 'Failed to update password.');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   if (loading) return <SkeletonProfile />;
 
   return (
-    <div className="max-w-xl mx-auto py-8">
+    <div className="max-w-xl mx-auto py-8 space-y-6">
+      {/* Account Profile Card */}
       <div className="bg-white border border-neutral-200 rounded-md p-6 space-y-6">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Account Profile</h1>
@@ -156,6 +188,60 @@ export default function ProfilePage() {
                 </>
               ) : (
                 <span>Save Changes</span>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Security & Password Card */}
+      <div className="bg-white border border-neutral-200 rounded-md p-6 space-y-6">
+        <div>
+          <h2 className="text-lg font-bold text-neutral-900">Security & Password</h2>
+          <p className="text-xs text-neutral-450 mt-1">Change your account password to keep your administrator access secure.</p>
+        </div>
+
+        <form onSubmit={handlePasswordChange} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-neutral-450 uppercase tracking-wide">New Password</label>
+            <PasswordInput
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password (min. 8 characters)"
+              minLength={8}
+              required
+              id="admin-new-password"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-neutral-450 uppercase tracking-wide">Confirm New Password</label>
+            <PasswordInput
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter new password"
+              minLength={8}
+              required
+              id="admin-confirm-password"
+            />
+          </div>
+
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={changingPassword || !newPassword || !confirmPassword}
+              className="w-full py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white font-bold rounded-sm text-sm shadow-sm active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center space-x-1.5 disabled:opacity-50"
+            >
+              {changingPassword ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Updating Password...</span>
+                </>
+              ) : (
+                <span>Update Password</span>
               )}
             </button>
           </div>

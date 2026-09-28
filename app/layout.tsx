@@ -3,8 +3,13 @@ import "./globals.css";
 import { ToastProvider } from "@/components/ui";
 
 export const metadata: Metadata = {
-  title: "Lighting Design Portal",
-  description: "LightMap - Lighting Design Portal",
+  title: "Lightmaps - Lighting Design Portal",
+  description: "Lightmaps - Lighting Design Portal",
+  icons: {
+    icon: "/new-logo.png",
+    shortcut: "/favicon.ico",
+    apple: "/new-logo.png",
+  },
 };
 
 export default function RootLayout({

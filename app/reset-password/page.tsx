@@ -92,7 +92,7 @@ export default function ResetPasswordPage() {
   return (
     <AuthLayout
       title="Set a new password"
-      subtitle="Choose a new password for your LightMap account"
+      subtitle="Choose a new password for your Lightmaps account"
     >
       {invalidLink ? (
         <div className="p-4 bg-red-50 border border-red-200 rounded-md flex items-start space-x-3 text-red-800 text-sm">

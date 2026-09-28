@@ -6,6 +6,7 @@ import Portal from './Portal';
 interface InvoiceModalProps {
   invoice: any;
   onClose: () => void;
+  onPayInvoice?: (invoice: any) => void;
 }
 
 const STATUS_TEXT_COLOR: Record<string, string> = {
@@ -14,7 +15,7 @@ const STATUS_TEXT_COLOR: Record<string, string> = {
   failed: 'text-rose-600',
 };
 
-export default function InvoiceModal({ invoice, onClose }: InvoiceModalProps) {
+export default function InvoiceModal({ invoice, onClose, onPayInvoice }: InvoiceModalProps) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
@@ -63,6 +64,15 @@ export default function InvoiceModal({ invoice, onClose }: InvoiceModalProps) {
               Invoice {invoice.invoice_number}
             </span>
             <div className="flex items-center gap-2">
+              {statusKey === 'pending' && onPayInvoice && (
+                <button
+                  onClick={() => onPayInvoice(invoice)}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-medium text-xs rounded-md transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
+                >
+                  <i className="bx bx-credit-card text-sm"></i>
+                  <span>Pay Invoice</span>
+                </button>
+              )}
               <button
                 onClick={() => window.print()}
                 className="px-3.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white font-medium text-xs rounded-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
@@ -85,11 +95,11 @@ export default function InvoiceModal({ invoice, onClose }: InvoiceModalProps) {
               {/* Letterhead */}
               <div className="flex items-start justify-between pb-6 border-b-2 border-neutral-900">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-md bg-neutral-900 flex items-center justify-center shrink-0">
-                    <i className="bx bxs-map-pin text-white text-lg"></i>
+                  <div className="w-9 h-9 flex items-center justify-center shrink-0">
+                    <img src="/new-logo.png" alt="Lightmaps Logo" className="w-full h-full object-contain" />
                   </div>
                   <div>
-                    <span className="font-bold text-neutral-900 text-sm tracking-tight block leading-tight">LightMap</span>
+                    <span className="font-bold text-neutral-900 text-sm tracking-tight block leading-tight">Lightmaps</span>
                     <span className="text-[11px] text-neutral-450 font-medium block leading-tight">Design Studio</span>
                   </div>
                 </div>

@@ -240,7 +240,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
       order_id: orderId,
       amount: grandTotal * 100, // Amount in paise (Grand Total including 18% GST)
       currency: "INR",
-      name: "LightMap",
+      name: "Lightmaps",
       description: `Payment for ${project?.project_name || 'Project'} (incl. 18% GST)`,
       handler: async function (response: any) {
         try {
@@ -329,7 +329,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
       order_id: orderId,
       amount: amountToPay * 100, // Amount in paise
       currency: "INR",
-      name: "LightMap",
+      name: "Lightmaps",
       description: `50% Final Release Payment for ${project?.project_name || 'Project'}`,
       handler: async function (response: any) {
         try {

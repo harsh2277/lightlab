@@ -200,7 +200,13 @@ export default function DesignerProjectsList() {
                       {proj.project_id_serial || 'KL-2025-XXXX'}
                     </span>
                     <div className="flex flex-col items-end gap-1">
-                      <StatusBadge status={proj.status} type="workflow" />
+                      {proj.payment_status === 'pending' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                          Payment Pending (Hold)
+                        </span>
+                      ) : (
+                        <StatusBadge status={proj.status} type="workflow" />
+                      )}
                       <DeadlineBadge deadline={proj.deadline} />
                     </div>
                   </div>
@@ -265,7 +271,13 @@ export default function DesignerProjectsList() {
                     <td className="py-3.5 px-4 first:pl-5 last:pr-5 text-neutral-550 text-sm">{proj.area_sq_ft ? proj.area_sq_ft.toLocaleString() : 'N/A'}</td>
                     <td className="py-3.5 px-4 first:pl-5 last:pr-5">
                       <div className="flex flex-col gap-1 items-start">
-                        <StatusBadge status={proj.status} type="workflow" />
+                        {proj.payment_status === 'pending' ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                            Payment Pending (Hold)
+                          </span>
+                        ) : (
+                          <StatusBadge status={proj.status} type="workflow" />
+                        )}
                         <DeadlineBadge deadline={proj.deadline} />
                       </div>
                     </td>

@@ -4,39 +4,119 @@ import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import LayoutToggle from '@/components/ui/LayoutToggle';
 import SearchInput from '@/components/ui/SearchInput';
-import { StatusBadge, SkeletonPaymentsPage, InvoiceModal } from '@/components/ui';
+import { StatusBadge, SkeletonPaymentsPage, InvoiceModal, useToast } from '@/components/ui';
 
 export default function ArchitectPaymentsPage() {
   const supabase = createClient();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
 
-  const fetchedRef = useRef(false);
+  const fetchPayments = async () => {
+    try {
+      const res = await fetch('/api/payments');
+      if (res.ok) {
+        const data = await res.json();
+        setPayments(data.payments || []);
+      }
+    } catch (err) {
+      console.error('Error fetching payments:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-
-    async function fetchPayments() {
-      try {
-        const res = await fetch('/api/payments');
-        if (res.ok) {
-          const data = await res.json();
-          setPayments(data.payments || []);
-        }
-      } catch (err) {
-        console.error('Error fetching payments:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
+    // Dynamic load Razorpay checkout script
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
 
     fetchPayments();
+
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
   }, []);
+
+  const handlePayInvoice = async (pay: any) => {
+    if (!pay.project_id || !pay.id) {
+      toastError('Invoice details are incomplete for payment processing.');
+      return;
+    }
+    setPayingInvoiceId(pay.id);
+    try {
+      const orderRes = await fetch('/api/payments/razorpay/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: pay.project_id, paymentId: pay.id }),
+      });
+      const orderData = await orderRes.json();
+      if (!orderRes.ok || !orderData.orderId) {
+        throw new Error(orderData.error || 'Failed to initialize payment gateway.');
+      }
+
+      const options = {
+        key: orderData.keyId,
+        order_id: orderData.orderId,
+        amount: orderData.amount,
+        currency: "INR",
+        name: "Lightmaps",
+        description: `Payment for Invoice #${pay.invoice_number}`,
+        handler: async function (response: any) {
+          try {
+            const verifyRes = await fetch('/api/payments/razorpay/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                projectId: pay.project_id,
+                paymentId: pay.id,
+                kind: 'full',
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok || !verifyData.success) {
+              throw new Error(verifyData.error || 'Payment verification failed');
+            }
+            toastSuccess('Payment successful! Invoice has been settled.');
+            fetchPayments();
+            if (selectedInvoice && selectedInvoice.id === pay.id) {
+              setSelectedInvoice((prev: any) => ({ ...prev, status: 'completed' }));
+            }
+          } catch (err: any) {
+            toastError(err.message || 'Payment verification failed.');
+          } finally {
+            setPayingInvoiceId(null);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setPayingInvoiceId(null);
+          }
+        },
+        theme: {
+          color: "#f59e0b"
+        }
+      };
+
+      const razorpay = new (window as any).Razorpay(options);
+      razorpay.open();
+    } catch (err: any) {
+      toastError(err.message || 'Error opening payment gateway.');
+      setPayingInvoiceId(null);
+    }
+  };
 
   if (loading) {
     return <SkeletonPaymentsPage />;
@@ -140,18 +220,30 @@ export default function ArchitectPaymentsPage() {
                     <span className="text-xs font-medium text-neutral-500">Invoiced Amount</span>
                     <span className="text-base font-medium text-neutral-800">₹{Number(pay.amount).toLocaleString('en-IN')}</span>
                   </div>
-                  <div className="flex justify-between items-center pt-2">
+                  <div className="flex justify-between items-center pt-2 gap-2">
                     <span className="text-xs text-neutral-450 font-medium">
                       {new Date(pay.created_at).toLocaleDateString()}
                     </span>
-                    <button
-                      onClick={() => setSelectedInvoice(pay)}
-                      className="inline-flex items-center px-3 py-1.5 hover:bg-neutral-50 text-neutral-600 hover:text-amber-600 border border-neutral-200 rounded-md transition-all cursor-pointer text-xs font-medium active:scale-[0.98]"
-                      title="View Detailed Invoice"
-                    >
-                      <i className="bx bx-receipt text-sm mr-1"></i>
-                      <span>Details</span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {pay.status === 'pending' && (
+                        <button
+                          onClick={() => handlePayInvoice(pay)}
+                          disabled={payingInvoiceId === pay.id}
+                          className="inline-flex items-center px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md transition-all cursor-pointer text-xs font-semibold shadow-xs active:scale-[0.98] disabled:opacity-50"
+                        >
+                          <i className="bx bx-credit-card text-sm mr-1"></i>
+                          <span>{payingInvoiceId === pay.id ? 'Loading...' : 'Pay Now'}</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setSelectedInvoice(pay)}
+                        className="inline-flex items-center px-3 py-1.5 hover:bg-neutral-50 text-neutral-600 hover:text-amber-600 border border-neutral-200 rounded-md transition-all cursor-pointer text-xs font-medium active:scale-[0.98]"
+                        title="View Detailed Invoice"
+                      >
+                        <i className="bx bx-receipt text-sm mr-1"></i>
+                        <span>Details</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -189,14 +281,26 @@ export default function ArchitectPaymentsPage() {
                       <StatusBadge status={pay.status} type="payment" />
                     </td>
                     <td className="py-3.5 px-4 first:pl-5 last:pr-5 text-right">
-                      <button
-                        onClick={() => setSelectedInvoice(pay)}
-                        className="inline-flex items-center px-3 py-1.5 hover:bg-neutral-50 text-neutral-600 hover:text-amber-600 border border-neutral-200 rounded-md transition-all cursor-pointer text-xs font-medium active:scale-[0.98]"
-                        title="View Detailed Invoice"
-                      >
-                        <i className="bx bx-receipt text-sm mr-1.5"></i>
-                        <span>View Details</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        {pay.status === 'pending' && (
+                          <button
+                            onClick={() => handlePayInvoice(pay)}
+                            disabled={payingInvoiceId === pay.id}
+                            className="inline-flex items-center px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-md transition-all cursor-pointer text-xs shadow-xs active:scale-[0.98] disabled:opacity-50"
+                          >
+                            <i className="bx bx-credit-card text-sm mr-1"></i>
+                            <span>{payingInvoiceId === pay.id ? 'Loading...' : 'Pay Now'}</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setSelectedInvoice(pay)}
+                          className="inline-flex items-center px-3 py-1.5 hover:bg-neutral-50 text-neutral-600 hover:text-amber-600 border border-neutral-200 rounded-md transition-all cursor-pointer text-xs font-medium active:scale-[0.98]"
+                          title="View Detailed Invoice"
+                        >
+                          <i className="bx bx-receipt text-sm mr-1.5"></i>
+                          <span>View Details</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -208,7 +312,11 @@ export default function ArchitectPaymentsPage() {
 
       {/* Invoice Detail Modal (Printable) */}
       {selectedInvoice && (
-        <InvoiceModal invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} />
+        <InvoiceModal
+          invoice={selectedInvoice}
+          onClose={() => setSelectedInvoice(null)}
+          onPayInvoice={handlePayInvoice}
+        />
       )}
     </div>
   );

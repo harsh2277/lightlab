@@ -3,8 +3,8 @@ import { createClient as createCookieClient } from '@/utils/supabase/server';
 import { getSupabaseAdmin } from '@/utils/supabase/admin';
 import { rateLimit, clientKeyFrom } from '@/utils/rateLimit';
 
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_ThPfSe1IqrzkCf';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '6DABlKvTLpi1aBOMWUeI8gyJ';
 
 export async function POST(request: Request) {
   try {

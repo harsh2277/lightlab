@@ -91,7 +91,7 @@ export default function SignupPage() {
   if (submitted) {
     return (
       <AuthWelcome
-        title={`Welcome to LightMap${name ? `, ${name.split(' ')[0]}` : ''}!`}
+        title={`Welcome to Lightmaps${name ? `, ${name.split(' ')[0]}` : ''}!`}
         subtitle="Your account is ready. Taking you to your dashboard..."
       />
     );
@@ -100,7 +100,7 @@ export default function SignupPage() {
   return (
     <AuthLayout
       title="Create your account"
-      subtitle="Get your studio started with LightMap"
+      subtitle="Get your studio started with Lightmaps"
       footer={
         <p className="text-center text-sm text-neutral-500">
           Already have an account?{' '}

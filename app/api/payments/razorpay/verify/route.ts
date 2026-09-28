@@ -3,8 +3,8 @@ import crypto from 'crypto';
 import { createClient as createCookieClient } from '@/utils/supabase/server';
 import { getSupabaseAdmin } from '@/utils/supabase/admin';
 
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_ThPfSe1IqrzkCf';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '6DABlKvTLpi1aBOMWUeI8gyJ';
 
 // projectPaymentKind identifies which server-side state transition to apply once
 // the Razorpay signature has been verified:

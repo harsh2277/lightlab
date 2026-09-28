@@ -194,21 +194,25 @@ export async function PUT(request: Request) {
     const { client } = authCtx;
     const supabaseAdmin = getSupabaseAdmin();
 
-    const { userId, email, name, role, mobileNumber } = await request.json();
+    const { userId, email, name, role, mobileNumber, password } = await request.json();
 
     if (!userId || !email || !name || !role) {
       return Response.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     try {
-      await supabaseAdmin.auth.admin.updateUserById(userId, {
+      const updateAuthPayload: any = {
         email,
         user_metadata: {
           name,
           role,
           mobile_number: mobileNumber || '',
         }
-      });
+      };
+      if (password && typeof password === 'string' && password.trim().length >= 8) {
+        updateAuthPayload.password = password.trim();
+      }
+      await supabaseAdmin.auth.admin.updateUserById(userId, updateAuthPayload);
     } catch (e: any) {
       console.warn('admin.updateUserById failed:', e.message);
     }

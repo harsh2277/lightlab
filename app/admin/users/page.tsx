@@ -164,10 +164,44 @@ export default function AdminUsersManagement() {
     }
   };
 
+  const exportUsersToCSV = () => {
+    if (!users || users.length === 0) {
+      toastError('No users available to export.');
+      return;
+    }
+    const headers = ['User ID', 'Full Name', 'Email', 'Role', 'Mobile Number', 'Joined Date'];
+    const rows = users
+      .filter(u => u.role !== 'admin')
+      .map(u => [
+        `"${u.id || ''}"`,
+        `"${(u.name || '').replace(/"/g, '""')}"`,
+        `"${(u.email || '').replace(/"/g, '""')}"`,
+        `"${(u.role || '').toUpperCase()}"`,
+        `"${(u.mobile_number || '').replace(/"/g, '""')}"`,
+        `"${u.created_at ? new Date(u.created_at).toISOString().split('T')[0] : ''}"`
+      ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Lightmaps_Users_Master_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toastSuccess('User directory exported successfully!');
+  };
+
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setFormError(null);
+
+    if (editingUser.newPassword && editingUser.newPassword.trim().length > 0 && editingUser.newPassword.trim().length < 8) {
+      setFormError('New password must be at least 8 characters long.');
+      setSubmitting(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/admin/users', {
@@ -179,6 +213,7 @@ export default function AdminUsersManagement() {
           name: editingUser.name,
           role: editingUser.role,
           mobileNumber: editingUser.mobile_number,
+          password: editingUser.newPassword && editingUser.newPassword.trim().length >= 8 ? editingUser.newPassword.trim() : undefined,
         }),
       });
 
@@ -252,18 +287,28 @@ export default function AdminUsersManagement() {
   return (
     <div className="space-y-6">
       {/* Title block */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-medium text-neutral-900 font-sans">User Directory</h2>
           <p className="text-sm text-neutral-400 mt-0.5">Manage credentials, coordinate designer assignments, and update system roles.</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm rounded-md transition-colors cursor-pointer"
-        >
-          <i className="bx bx-plus text-sm mr-1.5"></i>
-          <span>Add User</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportUsersToCSV}
+            className="inline-flex items-center px-3.5 py-2 bg-white hover:bg-neutral-50 text-neutral-700 font-medium text-sm border border-neutral-200 rounded-md transition-colors cursor-pointer shadow-xs"
+            title="Export User Master to CSV spreadsheet"
+          >
+            <i className="bx bx-download text-sm mr-1.5 text-neutral-500"></i>
+            <span>Export CSV</span>
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm rounded-md transition-colors cursor-pointer shadow-xs"
+          >
+            <i className="bx bx-plus text-sm mr-1.5"></i>
+            <span>Add User</span>
+          </button>
+        </div>
       </div>
 
       {/* Notifications */}
@@ -660,6 +705,19 @@ export default function AdminUsersManagement() {
                     onChange={(e) => setEditingUser({ ...editingUser, mobile_number: e.target.value })}
                     placeholder="+91 XXXXX XXXXX"
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-md text-sm focus:outline-none focus:bg-white focus:border-amber-500 transition-colors font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-neutral-600 mb-1.5">
+                    Reset Password <span className="text-xs text-neutral-400 font-normal">(leave blank to keep current)</span>
+                  </label>
+                  <PasswordInput
+                    value={editingUser.newPassword || ''}
+                    onChange={(e) => setEditingUser({ ...editingUser, newPassword: e.target.value })}
+                    placeholder="Enter new password (min. 8 characters)"
+                    minLength={8}
+                    id="edit-user-password"
                   />
                 </div>
 

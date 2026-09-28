@@ -224,7 +224,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Reusable Sidebar Component */}
       <Sidebar
-        workspaceTitle="LightMap"
+        workspaceTitle="Lightmaps"
         workspaceSubtitle="Admin Workspace"
         workspaceIcon="bx bxs-bulb"
         navItems={navItems}
@@ -250,6 +250,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           setNotifications={setNotifications}
           handleSignOut={handleSignOut}
           notificationsBasePath="/admin/notifications"
+          profileHref="/admin/profile"
           showQuickSearch={true}
         />
 

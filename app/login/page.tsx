@@ -100,10 +100,10 @@ export default function LoginPage() {
   return (
     <AuthLayout
       title="Welcome back"
-      subtitle="Sign in to your LightMap account to continue"
+      subtitle="Sign in to your Lightmaps account to continue"
       footer={
         <p className="text-center text-sm text-neutral-500">
-          New to LightMap?{' '}
+          New to Lightmaps?{' '}
           <Link href="/signup" className="font-medium text-amber-700 hover:text-amber-800">
             Create an account
           </Link>

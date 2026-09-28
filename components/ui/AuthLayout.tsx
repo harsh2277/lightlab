@@ -18,6 +18,15 @@ export default function AuthLayout({
         <div className="bg-white border border-neutral-200 rounded-2xl shadow-sm p-6 sm:p-10">
 
           <div className="mb-6 text-left">
+            <div className="flex items-center gap-2.5 mb-5">
+              <div className="w-9 h-9 flex items-center justify-center shrink-0">
+                <img src="/new-logo.png" alt="Lightmaps Logo" className="w-full h-full object-contain" />
+              </div>
+              <div>
+                <span className="font-bold text-neutral-900 text-sm tracking-tight block leading-tight">Lightmaps</span>
+                <span className="text-[11px] text-neutral-400 font-medium block leading-tight">Lighting Design Portal</span>
+              </div>
+            </div>
             <h1 className="text-xl font-semibold tracking-tight text-neutral-900">{title}</h1>
             <p className="text-sm text-neutral-500 mt-1.5">{subtitle}</p>
           </div>

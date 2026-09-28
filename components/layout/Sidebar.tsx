@@ -21,7 +21,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({
-  workspaceTitle = 'LightMap',
+  workspaceTitle = 'Lightmaps',
   workspaceSubtitle = 'Workspace',
   workspaceIcon = 'bx bxs-map-pin',
   navItems,
@@ -64,8 +64,8 @@ export default function Sidebar({
             className={`p-3 xl:p-4 flex items-center bg-neutral-950 border-b border-neutral-900 ${isCollapsed && !isMobileOpen ? 'justify-center' : 'space-x-2.5'
               }`}
           >
-            <div className="w-8 h-8 rounded-md overflow-hidden bg-neutral-900 border border-neutral-800 flex items-center justify-center flex-shrink-0">
-              <img src="https://gncpstvyexbkwibdqzua.supabase.co/storage/v1/object/public/project-assets/logo/ChatGPT%20Image%20Jul%2023,%202026,%2012_07_04%20PM.png" alt="LightMap Logo" className="w-full h-full object-cover" />
+            <div className="w-9 h-9 flex items-center justify-center flex-shrink-0">
+              <img src="/new-logo.png" alt="Lightmaps Logo" className="w-full h-full object-contain" />
             </div>
             {(!isCollapsed || isMobileOpen) && (
               <div className="min-w-0">

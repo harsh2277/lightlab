@@ -25,10 +25,12 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
   const [activeTab, setActiveTab] = useState<'Overview' | 'Deliverables' | 'My Feedback'>('Overview');
   const [feedbackEntries, setFeedbackEntries] = useState<any[]>([]);
 
-  // Approve modal state
+  // Approve & Revision modal state
   const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [clientNameInput, setClientNameInput] = useState('');
   const [approvalNoteInput, setApprovalNoteInput] = useState('');
+  const [revisionNotesInput, setRevisionNotesInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const toast = useToast();
 
@@ -39,7 +41,7 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
 
       const { data: proj, error: projError } = await supabase
         .from('projects')
-        .select('*, pricing_plans(name)')
+        .select('*, pricing_plans(*)')
         .eq('id', id)
         .single();
 
@@ -140,6 +142,60 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
     }
   };
 
+  const getAllowedRevisions = () => {
+    const plan = project?.pricing_plans;
+    if (!plan) return 1;
+    if (Array.isArray(plan.bottom_features)) {
+      for (const feat of plan.bottom_features) {
+        const match = feat.match(/(\d+)\s*revision/i);
+        if (match) return parseInt(match[1], 10);
+      }
+      if (plan.bottom_features.some((f: string) => f.toLowerCase().includes('multiple revision'))) {
+        return 5;
+      }
+    }
+    const nameLower = (plan.name || '').toLowerCase();
+    if (nameLower.includes('enterprise')) return 5;
+    if (nameLower.includes('premium')) return 3;
+    if (nameLower.includes('professional')) return 2;
+    return 1;
+  };
+
+  const handleRequestRevision = async () => {
+    if ((project?.payment_status || 'pending') !== 'paid') {
+      toast.error('Payment Pending - do not process further. Revisions will proceed once payment is confirmed.');
+      return;
+    }
+
+    if (!revisionNotesInput.trim()) {
+      toast.error('Please enter the changes or instructions for the revision.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/client/approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: id,
+          action: 'feedback',
+          clientName: clientNameInput || project?.client_name || 'Homeowner',
+          feedbackNotes: revisionNotesInput.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit revision request');
+      toast.success('Revision request submitted! Your notes have been sent to the design team.');
+      setShowRevisionModal(false);
+      setRevisionNotesInput('');
+      await fetchProjectDetails();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to submit revision.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -232,8 +288,8 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
         {/* Header */}
         <header className="bg-white border-b border-neutral-200/80 px-6 py-4 sticky top-0 z-30 shadow-xs">
           <div className="max-w-3xl mx-auto flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center text-white shadow-sm shadow-amber-500/20 font-black text-lg">
-              <i className="bx bxs-bulb"></i>
+            <div className="w-9 h-9 flex items-center justify-center shrink-0">
+              <img src="/new-logo.png" alt="Lightmaps Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
@@ -301,8 +357,8 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
       <header className="bg-white border-b border-neutral-200/80 px-6 py-4 sticky top-0 z-30 shadow-xs flex-shrink-0">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center text-white shadow-sm shadow-amber-500/20 font-black text-lg">
-              <i className="bx bxs-bulb"></i>
+            <div className="w-9 h-9 flex items-center justify-center shrink-0">
+              <img src="/new-logo.png" alt="Lightmaps Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
@@ -367,15 +423,34 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
               </p>
             </div>
 
-            {!isApproved && (
-              <button
-                onClick={() => setShowApproveModal(true)}
-                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs rounded-sm transition-all shadow-sm shadow-amber-500/10 flex items-center justify-center space-x-1.5 cursor-pointer shrink-0"
-              >
-                <i className="bx bx-check-circle text-base"></i>
-                <span>Approve Design</span>
-              </button>
-            )}
+            {(() => {
+              const allowedRevs = getAllowedRevisions();
+              const usedRevs = (feedbackEntries || []).filter((r: any) => r.description?.includes('CLIENT FEEDBACK')).length;
+              const isEnterprise = (project?.pricing_plans?.name || '').toLowerCase().includes('enterprise');
+              const canRevise = !isApproved && (isEnterprise || usedRevs < allowedRevs);
+
+              return !isApproved ? (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                  <button
+                    onClick={() => setShowRevisionModal(true)}
+                    disabled={!canRevise}
+                    title={!canRevise ? `All ${allowedRevs} plan revision(s) have been used.` : 'Request design changes / revisions'}
+                    className="px-4 py-2.5 bg-white hover:bg-neutral-50 text-neutral-800 border border-neutral-300 font-semibold text-xs rounded-sm transition-all shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <i className="bx bx-edit text-sm text-neutral-600"></i>
+                    <span>Request Revision ({usedRevs}/{allowedRevs})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowApproveModal(true)}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs rounded-sm transition-all shadow-sm shadow-amber-500/10 flex items-center justify-center space-x-1.5 cursor-pointer"
+                  >
+                    <i className="bx bx-check-circle text-base"></i>
+                    <span>Approve Design</span>
+                  </button>
+                </div>
+              ) : null;
+            })()}
           </div>
         </div>
 
@@ -640,6 +715,90 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
                     <>
                       <i className="bx bx-check text-base"></i>
                       <span>Confirm Approval</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+      </Modal>
+
+      {/* Request Revision Modal */}
+      <Modal isOpen={showRevisionModal} onClose={() => setShowRevisionModal(false)} maxWidthClassName="max-w-md">
+          <div className="overflow-hidden">
+            <div className="h-1 w-full bg-gradient-to-r from-amber-400 to-orange-500" />
+            <div className="p-6 space-y-5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-bold text-neutral-900">Request Design Revision</h3>
+                  <p className="text-xs text-neutral-500 mt-0.5">Submit change instructions for {project.project_name}</p>
+                </div>
+                <button
+                  onClick={() => setShowRevisionModal(false)}
+                  className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-neutral-100 text-neutral-500 transition-colors cursor-pointer"
+                >
+                  <i className="bx bx-x text-lg"></i>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-md flex items-center justify-between text-xs">
+                  <span className="font-semibold text-amber-900">
+                    Plan: {project?.pricing_plans?.name || 'Selected Plan'}
+                  </span>
+                  <span className="font-medium text-amber-800">
+                    Revision {(feedbackEntries || []).filter((r: any) => r.description?.includes('CLIENT FEEDBACK')).length + 1} of {getAllowedRevisions()}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-neutral-700 block mb-1">Your Name</label>
+                  <input
+                    type="text"
+                    value={clientNameInput}
+                    onChange={(e) => setClientNameInput(e.target.value)}
+                    placeholder="e.g., Client Name"
+                    className="w-full bg-white border border-neutral-200 rounded-md px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-neutral-700 block mb-1">
+                    Revision Notes & Change Details <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={revisionNotesInput}
+                    onChange={(e) => setRevisionNotesInput(e.target.value)}
+                    placeholder="Please describe the changes needed (e.g., adjust living room light warmth to 3000K, move master bedroom cove lighting 6 inches outward)..."
+                    className="w-full bg-white border border-neutral-200 rounded-md p-3 text-xs text-neutral-800 focus:outline-none focus:border-amber-500 transition-colors resize-none leading-relaxed"
+                  />
+                </div>
+
+                <p className="text-[11px] text-neutral-500 leading-normal">
+                  Your revision notes will be sent immediately to the architect and design team. The project status will update to <strong>Revision Requested</strong>.
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-1">
+                <button
+                  onClick={() => setShowRevisionModal(false)}
+                  className="flex-1 py-2.5 bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 font-bold text-xs rounded-sm transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRequestRevision}
+                  disabled={isSubmitting || !revisionNotesInput.trim()}
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider rounded-sm transition-all shadow-md disabled:opacity-50 cursor-pointer flex items-center justify-center space-x-1.5"
+                >
+                  {isSubmitting ? (
+                    <span>Submitting...</span>
+                  ) : (
+                    <>
+                      <i className="bx bx-send text-base"></i>
+                      <span>Submit Revision</span>
                     </>
                   )}
                 </button>

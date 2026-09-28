@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export interface NotificationItem {
   id: number | string;
@@ -28,6 +29,7 @@ interface TopbarProps {
   setNotifications: React.Dispatch<React.SetStateAction<NotificationItem[]>>;
   handleSignOut: () => void;
   notificationsBasePath?: string;
+  profileHref?: string;
   showQuickSearch?: boolean;
 }
 
@@ -44,6 +46,7 @@ export default function Topbar({
   setNotifications,
   handleSignOut,
   notificationsBasePath = '/admin/notifications',
+  profileHref,
   showQuickSearch = true,
 }: TopbarProps) {
   const router = useRouter();
@@ -51,6 +54,8 @@ export default function Topbar({
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
+
+  const targetProfileHref = profileHref || `/${portalName.toLowerCase()}/profile`;
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -219,11 +224,28 @@ export default function Topbar({
           {showProfileDropdown && (
             <div className="absolute right-0 mt-2 w-56 bg-white border border-neutral-200 rounded-md py-1.5 z-50 text-neutral-800 font-sans shadow-lg">
               <div className="px-4 py-2 border-b border-neutral-100">
-                <p className="text-xs font-semibold text-neutral-900 truncate">
-                  {profile?.name || 'User'}
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-neutral-900 truncate">
+                    {profile?.name || 'User'}
+                  </p>
+                  <span className="text-[10px] font-medium bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded">
+                    {portalName}
+                  </span>
+                </div>
                 <p className="text-[11px] text-neutral-400 truncate">{profile?.email || ''}</p>
               </div>
+
+              <div className="py-1 border-b border-neutral-100">
+                <Link
+                  href={targetProfileHref}
+                  onClick={() => setShowProfileDropdown(false)}
+                  className="w-full text-left px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900 transition-colors flex items-center space-x-2 cursor-pointer"
+                >
+                  <i className="bx bx-user text-sm text-neutral-500"></i>
+                  <span>Profile</span>
+                </Link>
+              </div>
+
               <div className="py-1">
                 <button
                   onClick={handleSignOut}

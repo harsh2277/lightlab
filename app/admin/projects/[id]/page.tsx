@@ -149,6 +149,11 @@ export default function AdminProjectDetail() {
 
   const handleSaveChanges = (e: React.FormEvent) => {
     e.preventDefault();
+    const isPaymentSettled = paymentStatus === 'paid' || project?.payment_status === 'paid';
+    if (!isPaymentSettled && ['In Design', 'Ready for Client Review', 'Approved', 'Closed'].includes(status)) {
+      toastError(`Payment Pending - do not process further. Project cannot move forward to "${status}" until payment is completed.`);
+      return;
+    }
     setShowSaveConfirm(true);
   };
 
@@ -167,7 +172,26 @@ export default function AdminProjectDetail() {
     return `Update project: ${changes.join(', ')}.`;
   };
 
+  const handleCancelSave = () => {
+    setShowSaveConfirm(false);
+    if (project) {
+      setStatus(project.status || '');
+      setPaymentStatus(project.payment_status || 'pending');
+      setArchitectId(project.architect_id || '');
+      setAssignedDesignerId(project.assigned_designer_id || '');
+      setDeadline(project.deadline ? new Date(project.deadline).toISOString().substring(0, 10) : '');
+    }
+  };
+
   const performSaveChanges = async () => {
+    // Payment Pending check: do not allow progressing workflow if payment is unpaid
+    const isPaymentSettled = paymentStatus === 'paid' || project?.payment_status === 'paid';
+    if (!isPaymentSettled && ['In Design', 'Ready for Client Review', 'Approved', 'Closed'].includes(status)) {
+      toastError(`Payment Pending - do not process further. Project cannot be moved forward to "${status}" until payment is completed.`);
+      setShowSaveConfirm(false);
+      return;
+    }
+
     setUpdating(true);
 
     try {
@@ -227,6 +251,12 @@ export default function AdminProjectDetail() {
   };
 
   const handleApprove = async () => {
+    const isPaymentSettled = paymentStatus === 'paid' || project?.payment_status === 'paid';
+    if (!isPaymentSettled) {
+      toastError('Payment Pending: Please verify and record payment as paid before approving this project.');
+      return;
+    }
+
     if (!assignedDesignerId) {
       toastError('Please select and assign a designer before approving the project.');
       return;
@@ -450,18 +480,48 @@ export default function AdminProjectDetail() {
       <main className="flex-1 overflow-y-auto p-4 bg-neutral-50/70">
         <div className="content-container">
 
+          {/* Payment Pending Alert Banner for Admin (when not in Submitted) */}
+          {(paymentStatus !== 'paid' && project?.payment_status !== 'paid') && status !== 'Submitted' && (
+            <div className="mb-4 bg-amber-50 border-2 border-amber-300 rounded-md p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center flex-shrink-0">
+                  <i className="bx bx-time-five text-xl"></i>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-amber-900">Payment Pending — Do Not Process Further</h4>
+                  <p className="text-xs text-amber-800 font-medium mt-0.5">
+                    This project has a pending payment. Moving forward to In Design, Ready for Review, or releasing final deliverables is held until payment is marked as Paid.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPaymentStatus('paid')}
+                className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-md transition-all cursor-pointer flex-shrink-0 shadow-xs"
+              >
+                Mark as Paid
+              </button>
+            </div>
+          )}
+
           {/* Admin Approval Needed Action Banner */}
           {status === 'Submitted' && (
             <div className="mb-4 bg-rose-50 border border-rose-200 rounded-md p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-pulse-subtle">
               <div className="flex items-start space-x-3.5">
-                <div className="w-10 h-10 rounded-full bg-rose-500 text-white flex items-center justify-center flex-shrink-0">
-                  <i className="bx bx-error text-xl"></i>
+                <div className={`w-10 h-10 rounded-full text-white flex items-center justify-center flex-shrink-0 ${paymentStatus !== 'paid' && project?.payment_status !== 'paid' ? 'bg-amber-500' : 'bg-rose-500'}`}>
+                  <i className={`bx ${paymentStatus !== 'paid' && project?.payment_status !== 'paid' ? 'bx-time-five' : 'bx-error'} text-xl`}></i>
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-rose-900">Project Approval Required</h4>
-                  <p className="text-xs text-rose-700 font-medium mt-0.5">
+                  <h4 className="text-sm font-bold text-neutral-900">Project Approval Required</h4>
+                  <p className="text-xs text-neutral-600 font-medium mt-0.5">
                     This project was submitted by the architect. Please assign an internal designer below and approve the project creation.
                   </p>
+                  {paymentStatus !== 'paid' && project?.payment_status !== 'paid' && (
+                    <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-900 border border-amber-200 rounded text-xs font-semibold">
+                      <i className="bx bx-error-circle text-sm text-amber-600"></i>
+                      <span>Payment Pending — Do not process further. Payment must be confirmed before assigning a designer or starting design.</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -474,7 +534,9 @@ export default function AdminProjectDetail() {
                 </button>
                 <button
                   onClick={handleApprove}
-                  className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs rounded-md transition-all cursor-pointer shadow-sm"
+                  disabled={paymentStatus !== 'paid' && project?.payment_status !== 'paid'}
+                  title={paymentStatus !== 'paid' && project?.payment_status !== 'paid' ? 'Payment Pending - do not process further.' : 'Approve and move to In Design'}
+                  className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs rounded-md transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Approve & Assign
                 </button>
@@ -1035,7 +1097,7 @@ export default function AdminProjectDetail() {
         variant="default"
         loading={updating}
         onConfirm={performSaveChanges}
-        onClose={() => setShowSaveConfirm(false)}
+        onClose={handleCancelSave}
       />
     </>
   );

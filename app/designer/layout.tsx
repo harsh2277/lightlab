@@ -217,7 +217,7 @@ export default function DesignerLayout({ children }: { children: React.ReactNode
 
       {/* Reusable Sidebar Component */}
       <Sidebar
-        workspaceTitle="LightMap"
+        workspaceTitle="Lightmaps"
         workspaceSubtitle="Designer Workspace"
         workspaceIcon="bx bxs-palette"
         navItems={navItems}
@@ -243,6 +243,7 @@ export default function DesignerLayout({ children }: { children: React.ReactNode
           setNotifications={setNotifications}
           handleSignOut={handleSignOut}
           notificationsBasePath="/designer/notifications"
+          profileHref="/designer/profile"
           showQuickSearch={true}
         />
 

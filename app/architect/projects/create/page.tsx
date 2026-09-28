@@ -99,6 +99,7 @@ export default function ArchitectProjectCreationWizard() {
   // Form State
   const [selectedPlanId, setSelectedPlanId] = useState('professional'); // Default popular
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+  const [addonsList, setAddonsList] = useState<any[]>(ADDONS_DATA);
 
   const [projectDetails, setProjectDetails] = useState({
     projectName: '',
@@ -120,6 +121,8 @@ export default function ArchitectProjectCreationWizard() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [fileCategory, setFileCategory] = useState('layout');
 
+  const [uiPlans, setUiPlans] = useState(UI_PLANS);
+
   useEffect(() => {
     // Dynamic load Razorpay checkout script
     const script = document.createElement('script');
@@ -132,24 +135,98 @@ export default function ArchitectProjectCreationWizard() {
         const { data, error } = await supabase
           .from('pricing_plans')
           .select('*')
-          .eq('is_active', true);
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true, nullsFirst: false })
+          .order('min_sq_ft', { ascending: true });
 
         if (error) throw error;
-        setPlans(data || []);
+        if (data && data.length > 0) {
+          setPlans(data);
+
+          // Map dynamic DB plans to UI plans format
+          const mappedUiPlans = data.map((d: any) => {
+            const nameLower = d.name.toLowerCase();
+            const defaultMatch = UI_PLANS.find(
+              up => up.name.toLowerCase() === nameLower
+            );
+
+            // Use the real DB plan ID as the primary key
+            const planKey = d.id;
+            const priceNum = Number(d.base_price_per_sq_ft || d.flat_price || 0);
+            const isCustomQuote = d.is_custom_quote || (priceNum === 0 && !d.flat_price) || d.base_price_per_sq_ft === null;
+
+            const bottomFeatures = (Array.isArray(d.bottom_features) && d.bottom_features.length > 0)
+              ? d.bottom_features
+              : (defaultMatch?.bottomFeatures || ['1 Revision']);
+
+            const featuresArr = (Array.isArray(d.features) && d.features.length > 0)
+              ? d.features
+              : (d.description
+                ? d.description.split(',').map((s: string) => s.trim()).filter(Boolean)
+                : (defaultMatch?.features || ['Lighting Layout']));
+
+            return {
+              id: planKey,
+              dbId: d.id,
+              name: d.name,
+              sqft: d.sqft_label || defaultMatch?.sqft || (d.min_sq_ft ? `MIN ${Number(d.min_sq_ft).toLocaleString()} SQ.FT.` : 'CUSTOM AREA'),
+              price: priceNum > 0 ? priceNum : (defaultMatch?.price || null),
+              originalPrice: d.original_price ? Number(d.original_price) : (defaultMatch?.originalPrice || (priceNum > 0 ? priceNum * 2 : null)),
+              discount: isCustomQuote ? undefined : (d.discount_tag || defaultMatch?.discount || '50% off'),
+              popular: Boolean(d.is_popular),
+              customQuote: isCustomQuote,
+              features: featuresArr,
+              bottomFeatures,
+            };
+          });
+
+          setUiPlans(mappedUiPlans);
+
+          // Auto-select Most Popular plan, or first available plan
+          const popularPlan = mappedUiPlans.find((p: any) => p.popular);
+          if (popularPlan) {
+            setSelectedPlanId(popularPlan.id);
+          } else if (mappedUiPlans[0]) {
+            setSelectedPlanId(mappedUiPlans[0].id);
+          }
+        } else {
+          setPlans(data || []);
+        }
       } catch (err: any) {
         console.error('Error loading plans:', err);
-        // Fallback with current correct Amplex plan names (matched by name in getDbPlanId)
-        setPlans([
-          { id: 'fallback-essential', name: 'Amplex Essential', description: 'Lighting Layout, Fixture Suggestions, 1 Revision', base_price_per_sq_ft: '4999', min_sq_ft: '0' },
-          { id: 'fallback-professional', name: 'Amplex Professional', description: 'Lighting Layout, Fixture Suggestions, Lux Guidance, 2 Revisions', base_price_per_sq_ft: '9999', min_sq_ft: '1501' },
-          { id: 'fallback-premium', name: 'Amplex Premium', description: 'Detailed Lighting Layout, Lux Calculations, 3 Revisions, 2 Site Visits', base_price_per_sq_ft: '24999', min_sq_ft: '5001' },
-          { id: 'fallback-enterprise', name: 'Amplex Enterprise', description: 'Complete Lighting Design Support, Multiple Revisions, Dedicated Designer', base_price_per_sq_ft: '0', min_sq_ft: '10001' },
-        ]);
       } finally {
         setLoading(false);
       }
     }
     loadPlans();
+
+    async function loadAddons() {
+      try {
+        const { data, error } = await supabase
+          .from('pricing_addons')
+          .select('id, name, description, price, price_label')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          const mapped = data.map((d: any) => {
+            const numPrice = Number(d.price) || (d.price_label ? parseFloat(d.price_label.replace(/[^0-9.]/g, '')) : 0) || 0;
+            return {
+              id: d.id,
+              name: d.name,
+              description: d.description || (d.name.toLowerCase().includes('3d') ? 'Photorealistic 3D render of lighting design' : 'On-site consultation with our lighting expert'),
+              price: numPrice,
+              priceLabel: d.price_label || `₹${numPrice.toLocaleString('en-IN')}`,
+            };
+          });
+          setAddonsList(mapped);
+        }
+      } catch (addonsErr) {
+        console.warn('Could not load dynamic addons, using defaults:', addonsErr);
+      }
+    }
+    loadAddons();
 
     return () => {
       document.body.removeChild(script);
@@ -158,34 +235,18 @@ export default function ArchitectProjectCreationWizard() {
 
   const getDbPlanId = () => {
     if (plans.length === 0) return '';
-    // Match by name (most reliable — works even if DB order changes)
-    const nameMap: Record<string, string> = {
-      essential: 'Amplex Essential',
-      professional: 'Amplex Professional',
-      premium: 'Amplex Premium',
-      enterprise: 'Amplex Enterprise',
-    };
-    const targetName = nameMap[selectedPlanId];
-    const matched = plans.find(p => p.name === targetName);
+    const uiPlan = uiPlans.find(p => p.id === selectedPlanId);
+    if ((uiPlan as any)?.dbId) return (uiPlan as any).dbId;
+    const matched = plans.find(p => p.id === selectedPlanId || p.name.toLowerCase() === selectedPlanId.toLowerCase());
     return matched?.id || plans[0]?.id || '';
   };
-
-  const [uiPlans] = useState(UI_PLANS);
-
-  useEffect(() => {
-    // Clear any stale localStorage overrides so UI_PLANS is always the source of truth
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('lightmap_pricing_plan_overrides');
-    }
-
-  }, []);
 
   const calculateTotalPrice = () => {
     const plan = uiPlans.find(p => p.id === selectedPlanId);
     if (!plan || plan.customQuote) return 0;
     const planPrice = plan.price || 0;
     const addonsPrice = selectedAddons.reduce((sum, addonId) => {
-      const addon = ADDONS_DATA.find(a => a.id === addonId);
+      const addon = addonsList.find(a => a.id === addonId);
       return sum + (addon ? addon.price : 0);
     }, 0);
     return planPrice + addonsPrice;
@@ -200,15 +261,17 @@ export default function ArchitectProjectCreationWizard() {
     if (val !== '' && (Number(val) < 0 || !/^\d*$/.test(val))) return;
     setProjectDetails(prev => ({ ...prev, areaSqFt: val }));
     const num = Number(val);
-    if (!isNaN(num) && num > 0) {
-      if (num <= 1500) {
-        setSelectedPlanId('essential');
-      } else if (num <= 5000) {
-        setSelectedPlanId('professional');
-      } else if (num <= 10000) {
-        setSelectedPlanId('premium');
-      } else {
-        setSelectedPlanId('enterprise');
+    if (!isNaN(num) && num > 0 && uiPlans.length > 0) {
+      const matched = uiPlans.find(p => {
+        const lower = p.name.toLowerCase();
+        if (num <= 1500 && (lower.includes('essential') || lower.includes('basic'))) return true;
+        if (num > 1500 && num <= 5000 && lower.includes('professional')) return true;
+        if (num > 5000 && num <= 10000 && lower.includes('premium')) return true;
+        if (num > 10000 && lower.includes('enterprise')) return true;
+        return false;
+      });
+      if (matched) {
+        setSelectedPlanId(matched.id);
       }
     }
   };
@@ -408,7 +471,7 @@ export default function ArchitectProjectCreationWizard() {
       order_id: orderId,
       amount: chargeAmount * 100, // in paise
       currency: "INR",
-      name: "LightMap",
+      name: "Lightmaps",
       description: `Grand Total for ${project.project_name}`,
       handler: async function (response: any) {
         try {
@@ -488,7 +551,7 @@ export default function ArchitectProjectCreationWizard() {
     );
   }
 
-  const selectedPlan = UI_PLANS.find(p => p.id === selectedPlanId);
+  const selectedPlan = uiPlans.find(p => p.id === selectedPlanId) || UI_PLANS.find(p => p.id === selectedPlanId);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 font-sans pb-12 pt-2">
@@ -554,8 +617,14 @@ export default function ArchitectProjectCreationWizard() {
                   <p className="text-sm text-neutral-450 mt-0.5">Select a plan based on your project size. Pricing is auto-calculated — no negotiations.</p>
                 </div>
 
-                {/* 4 Columns Grid of Pricing Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+                {/* Dynamic Columns Grid of Pricing Cards */}
+                <div className={`grid ${
+                  uiPlans.length <= 1 ? 'grid-cols-1 max-w-md' :
+                  uiPlans.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-3xl' :
+                  uiPlans.length === 3 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' :
+                  uiPlans.length === 4 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' :
+                  'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+                } gap-4 lg:gap-5 mt-6`}>
                   {uiPlans.map((p) => {
                     const isSelected = selectedPlanId === p.id;
                     return (
@@ -646,7 +715,7 @@ export default function ArchitectProjectCreationWizard() {
                     <p className="text-sm text-neutral-450 mt-0.5">Optional services to enhance your project delivery.</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {ADDONS_DATA.map((addon) => {
+                    {addonsList.map((addon) => {
                       const isChecked = selectedAddons.includes(addon.id);
                       return (
                         <div
@@ -661,12 +730,12 @@ export default function ArchitectProjectCreationWizard() {
                             <div>
                               <span className="text-sm font-medium text-neutral-700 block">{addon.name}</span>
                               <span className="text-sm text-neutral-400 mt-0.5 block">
-                                {addon.id === '3d_vis' ? 'Photorealistic 3D render of lighting design' : 'On-site consultation with our lighting expert'}
+                                {addon.description}
                               </span>
                             </div>
                           </div>
                           <span className="text-sm font-medium text-amber-600">
-                            +₹{addon.price.toLocaleString()}
+                            +{addon.priceLabel || `₹${addon.price.toLocaleString('en-IN')}`}
                           </span>
                         </div>
                       );
@@ -1064,11 +1133,11 @@ export default function ArchitectProjectCreationWizard() {
                     <span className="text-sm text-neutral-455 font-medium block">Add-ons Selected</span>
                     <div className="space-y-1.5">
                       {selectedAddons.map(id => {
-                        const item = ADDONS_DATA.find(a => a.id === id);
+                        const item = addonsList.find(a => a.id === id);
                         return (
                           <div key={id} className="flex justify-between items-center text-sm bg-white/5 px-2.5 py-1.5 rounded-md border border-white/10">
                             <span className="text-neutral-300 font-medium">{item?.name}</span>
-                            <span className="text-neutral-200 font-medium">₹{item?.price.toLocaleString()}</span>
+                            <span className="text-neutral-200 font-medium">₹{item?.price.toLocaleString('en-IN')}</span>
                           </div>
                         );
                       })}
@@ -1086,7 +1155,7 @@ export default function ArchitectProjectCreationWizard() {
                   {selectedAddons.length > 0 && (
                     <div className="flex justify-between text-neutral-450">
                       <span>Add-ons Subtotal:</span>
-                      <span>₹{selectedAddons.reduce((sum, id) => sum + (ADDONS_DATA.find(a => a.id === id)?.price || 0), 0).toLocaleString()}</span>
+                      <span>₹{selectedAddons.reduce((sum, id) => sum + (addonsList.find(a => a.id === id)?.price || 0), 0).toLocaleString('en-IN')}</span>
                     </div>
                   )}
 

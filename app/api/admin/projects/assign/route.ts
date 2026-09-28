@@ -4,6 +4,7 @@ import { requireRole } from '@/utils/supabase/authorize';
 
 const VALID_PROJECT_STATUSES = [
   'Submitted',
+  'Payment Pending',
   'Under Review',
   'In Design',
   'Ready for Client Review',
@@ -39,6 +40,22 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (designerProfile?.role !== 'designer') {
         return Response.json({ error: 'designerId must belong to a designer account' }, { status: 400 });
+      }
+    }
+
+    // Enforce "Payment Pending - do not process further"
+    if (status && ['In Design', 'Ready for Client Review', 'Approved', 'Closed'].includes(status)) {
+      const { data: currentProj } = await supabaseAdmin
+        .from('projects')
+        .select('payment_status')
+        .eq('id', projectId)
+        .maybeSingle();
+
+      if (currentProj && currentProj.payment_status !== 'paid') {
+        return Response.json(
+          { error: 'Payment Pending - do not process further. Project payment must be verified before proceeding.' },
+          { status: 400 }
+        );
       }
     }
 

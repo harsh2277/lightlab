@@ -37,6 +37,7 @@ export default function AdminPricingManagement() {
     discount: '50% off',
     features: '',
     bottomFeatures: '',
+    isPopular: false,
     isActive: true
   });
 
@@ -49,6 +50,7 @@ export default function AdminPricingManagement() {
     discount: '',
     features: '',
     bottomFeatures: '',
+    isPopular: false,
     isActive: true
   });
 
@@ -103,34 +105,37 @@ export default function AdminPricingManagement() {
     try {
       const { data, error } = await supabase
         .from('pricing_plans')
-        .select('id, name, description, base_price_per_sq_ft, min_sq_ft, is_active')
+        .select('*')
+        .order('sort_order', { ascending: true, nullsFirst: false })
         .order('min_sq_ft', { ascending: true });
 
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const dbNames = new Set(data.map((d: any) => d.name.toLowerCase()));
-
         const dbPlans = data.map((d: any) => {
           const defaultMatch = defaultPlans.find(dp => dp.name.toLowerCase() === d.name.toLowerCase());
-          const priceNum = Number(d.base_price_per_sq_ft);
-          const bottomFeatures = defaultMatch?.bottomFeatures || ['1 Revision'];
-          const bottomSet = new Set(bottomFeatures.map((s: string) => s.toLowerCase()));
-          const featuresArr = (d.description
-            ? d.description.split(',').map((s: string) => s.trim()).filter(Boolean)
-            : (defaultMatch?.features || ['Lighting Layout'])
-          ).filter((f: string) => !bottomSet.has(f.toLowerCase()));
+          const priceNum = Number(d.base_price_per_sq_ft || d.flat_price || 0);
 
-          const isCustomQuote = priceNum === 0 || d.base_price_per_sq_ft === null;
+          const bottomFeatures = (Array.isArray(d.bottom_features) && d.bottom_features.length > 0)
+            ? d.bottom_features
+            : (defaultMatch?.bottomFeatures || ['1 Revision']);
+
+          const featuresArr = (Array.isArray(d.features) && d.features.length > 0)
+            ? d.features
+            : (d.description
+              ? d.description.split(',').map((s: string) => s.trim()).filter(Boolean)
+              : (defaultMatch?.features || ['Lighting Layout']));
+
+          const isCustomQuote = d.is_custom_quote || (priceNum === 0 && !d.flat_price) || d.base_price_per_sq_ft === null;
 
           return {
             id: d.id,
             name: d.name,
-            sqft: defaultMatch?.sqft || (d.min_sq_ft ? `MIN ${Number(d.min_sq_ft).toLocaleString()} SQ.FT.` : 'CUSTOM AREA'),
+            sqft: d.sqft_label || defaultMatch?.sqft || (d.min_sq_ft ? `MIN ${Number(d.min_sq_ft).toLocaleString()} SQ.FT.` : 'CUSTOM AREA'),
             price: priceNum > 0 ? priceNum : (defaultMatch?.price || null),
-            originalPrice: defaultMatch?.originalPrice || (priceNum > 0 ? priceNum * 2 : null),
-            discount: isCustomQuote ? undefined : (defaultMatch?.discount || '50% off'),
-            popular: defaultMatch?.popular || false,
+            originalPrice: d.original_price ? Number(d.original_price) : (defaultMatch?.originalPrice || (priceNum > 0 ? priceNum * 2 : null)),
+            discount: isCustomQuote ? undefined : (d.discount_tag || defaultMatch?.discount || '50% off'),
+            popular: Boolean(d.is_popular),
             customQuote: isCustomQuote,
             features: featuresArr,
             bottomFeatures,
@@ -138,8 +143,7 @@ export default function AdminPricingManagement() {
           };
         });
 
-        const missingDefaults = defaultPlans.filter(dp => !dbNames.has(dp.name.toLowerCase()));
-        setPlans([...dbPlans, ...missingDefaults]);
+        setPlans(dbPlans);
       } else {
         setPlans(defaultPlans);
       }
@@ -155,17 +159,17 @@ export default function AdminPricingManagement() {
     try {
       const { data, error } = await supabase
         .from('pricing_addons')
-        .select('id, name, price, price_label')
+        .select('id, name, description, price, price_label')
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
 
       if (!error && data && data.length > 0) {
         const loaded = data.map((a: any) => {
-          const known = DEFAULT_ADDONS.find((d) => d.name === a.name);
+          const known = DEFAULT_ADDONS.find((d) => d.name === a.name || a.name.toLowerCase().includes(d.name.toLowerCase()));
           return {
             id: a.id,
             name: a.name,
-            description: known?.description,
+            description: a.description || known?.description || 'Optional add-on service',
             price_label: a.price_label || `₹${Number(a.price || 0).toLocaleString('en-IN')}`,
           };
         });
@@ -200,7 +204,17 @@ export default function AdminPricingManagement() {
 
     try {
       const featuresArr = newPlan.features.split(',').map(s => s.trim()).filter(Boolean);
+      const bottomFeaturesArr = newPlan.bottomFeatures.split(',').map(s => s.trim()).filter(Boolean);
       const planPrice = newPlan.basePrice ? parseFloat(newPlan.basePrice) : 0;
+      const originalPrice = newPlan.originalPrice ? parseFloat(newPlan.originalPrice) : null;
+
+      if (newPlan.isPopular) {
+        // Ensure only ONE plan is popular at a time: unmark all other plans
+        await supabase
+          .from('pricing_plans')
+          .update({ is_popular: false })
+          .neq('id', '00000000-0000-0000-0000-000000000000');
+      }
 
       const { error: insertError } = await supabase
         .from('pricing_plans')
@@ -208,7 +222,14 @@ export default function AdminPricingManagement() {
           name: planName,
           description: featuresArr.join(', '),
           base_price_per_sq_ft: planPrice,
+          flat_price: planPrice,
+          original_price: originalPrice,
+          sqft_label: newPlan.sqft.trim() || null,
+          discount_tag: newPlan.discount.trim() || null,
+          features: featuresArr,
+          bottom_features: bottomFeaturesArr,
           min_sq_ft: 1000,
+          is_popular: newPlan.isPopular,
           is_active: newPlan.isActive
         });
 
@@ -216,7 +237,7 @@ export default function AdminPricingManagement() {
 
       toastSuccess(`Pricing Tier "${planName}" created successfully!`);
       setShowAddModal(false);
-      setNewPlan({ name: '', sqft: '', basePrice: '', originalPrice: '', discount: '50% off', features: '', bottomFeatures: '', isActive: true });
+      setNewPlan({ name: '', sqft: '', basePrice: '', originalPrice: '', discount: '50% off', features: '', bottomFeatures: '', isPopular: false, isActive: true });
       fetchPlans();
     } catch (err: any) {
       if (err.code === '23505' || err.message?.includes('duplicate key') || err.message?.includes('pricing_plans_name_key')) {
@@ -238,7 +259,17 @@ export default function AdminPricingManagement() {
 
     try {
       const featuresArr = editForm.features.split(',').map(s => s.trim()).filter(Boolean);
+      const bottomFeaturesArr = editForm.bottomFeatures.split(',').map(s => s.trim()).filter(Boolean);
       const updatedPrice = editForm.basePrice !== '' ? parseFloat(editForm.basePrice) : 0;
+      const originalPrice = editForm.originalPrice !== '' ? parseFloat(editForm.originalPrice) : null;
+
+      if (editForm.isPopular) {
+        // Ensure only ONE plan is popular at a time: unmark all other plans
+        await supabase
+          .from('pricing_plans')
+          .update({ is_popular: false })
+          .neq('id', editingPlan.id);
+      }
 
       const { error: updateError } = await supabase
         .from('pricing_plans')
@@ -246,6 +277,13 @@ export default function AdminPricingManagement() {
           name: planName,
           description: featuresArr.join(', '),
           base_price_per_sq_ft: updatedPrice,
+          flat_price: updatedPrice,
+          original_price: originalPrice,
+          sqft_label: editForm.sqft.trim() || null,
+          discount_tag: editForm.discount.trim() || null,
+          features: featuresArr,
+          bottom_features: bottomFeaturesArr,
+          is_popular: editForm.isPopular,
           is_active: editForm.isActive
         })
         .eq('id', editingPlan.id);
@@ -265,6 +303,7 @@ export default function AdminPricingManagement() {
       setSubmitting(false);
     }
   };
+
 
   const handleDeletePlan = async (id: string, name: string) => {
     try {
@@ -287,15 +326,32 @@ export default function AdminPricingManagement() {
     try {
       const isDefaultId = (id: string) => id.startsWith('default-');
 
+      const parsePrice = (label: string) => {
+        const cleaned = label.replace(/[^0-9.]/g, '');
+        const num = parseFloat(cleaned);
+        return isNaN(num) ? 0 : num;
+      };
+
       // Rows that already exist in the DB — update in place by id so renames don't create duplicates.
       const existingRows = addonForm
         .filter((a) => !isDefaultId(a.id))
-        .map(({ id, name, price_label }) => ({ id, name, price_label, is_active: true }));
+        .map(({ id, name, price_label }) => ({
+          id,
+          name,
+          price_label,
+          price: parsePrice(price_label),
+          is_active: true
+        }));
 
       // Rows still on their placeholder id (table row never existed / table not seeded yet) — insert fresh.
       const newRows = addonForm
         .filter((a) => isDefaultId(a.id))
-        .map(({ name, price_label }) => ({ name, price_label, is_active: true }));
+        .map(({ name, price_label }) => ({
+          name,
+          price_label,
+          price: parsePrice(price_label),
+          is_active: true
+        }));
 
       if (existingRows.length > 0) {
         const { error } = await supabase.from('pricing_addons').upsert(existingRows, { onConflict: 'id' });
@@ -328,6 +384,7 @@ export default function AdminPricingManagement() {
       discount: plan.discount || '',
       features: plan.features ? plan.features.join(', ') : '',
       bottomFeatures: plan.bottomFeatures ? plan.bottomFeatures.join(', ') : '',
+      isPopular: Boolean(plan.popular),
       isActive: plan.is_active !== undefined ? plan.is_active : true
     });
     setShowEditModal(true);
@@ -353,38 +410,44 @@ export default function AdminPricingManagement() {
         </button>
       </div>
 
-      {/* 4 COLUMNS CARD GRID MATCHING ADD PROJECT CARD CONTENT & STYLE EXACTLY */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+      {/* DYNAMIC CARD GRID MATCHING ALL DB PRICING PLANS */}
+      <div className={`grid ${
+        plans.length <= 1 ? 'grid-cols-1 max-w-md' :
+        plans.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-3xl' :
+        plans.length === 3 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' :
+        plans.length === 4 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' :
+        'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+      } gap-5 mt-6`}>
         {plans.map((p) => {
           return (
             <div
               key={p.id}
-              className={`border rounded-md p-6 bg-white flex flex-col justify-between space-y-6 hover:border-neutral-300 transition-all duration-200 relative h-full cursor-pointer ${
+              className={`border rounded-md p-5 bg-white flex flex-col justify-between hover:border-neutral-300 transition-all duration-200 relative h-full ${
                 p.popular ? 'border-amber-500 ring-1 ring-amber-500' : 'border-neutral-200'
               }`}
             >
               {p.popular && (
-                <Badge variant="amber" styleType="solid" size="xs" className="absolute -top-3 left-1/2 -translate-x-1/2 shadow-xs z-10">
+                <Badge variant="amber" styleType="solid" size="xs" className="absolute -top-3 left-1/2 -translate-x-1/2 shadow-xs z-10 whitespace-nowrap">
                   Most Popular
                 </Badge>
               )}
 
-              <div className="space-y-4">
-                <div className="flex justify-between items-start">
-                  <span className="text-xs font-semibold text-neutral-400">{p.sqft}</span>
-                  {p.discount && (
+              <div className="flex flex-col flex-1">
+                <div className="flex justify-between items-center gap-1 min-h-[22px]">
+                  <span className="text-[11px] font-semibold text-neutral-400">{p.sqft}</span>
+                  {p.discount ? (
                     <Badge variant="warning" styleType="soft" size="xs">
                       {p.discount}
                     </Badge>
-                  )}
+                  ) : <span className="h-5" />}
                 </div>
 
-                <h3 className="text-base font-semibold text-neutral-900 leading-snug">{p.name}</h3>
+                <h3 className="text-base font-semibold text-neutral-900 leading-snug mt-2 min-h-[24px] flex items-center">{p.name}</h3>
 
-                <div className="pt-4 border-t border-neutral-100 space-y-1">
+                <div className="pt-3 mt-3 border-t border-neutral-100 min-h-[58px] flex flex-col justify-center">
                   <span className="text-xs text-neutral-400 font-medium block">Rate</span>
                   {p.customQuote || p.price === null ? (
-                    <span className="text-xl font-bold text-neutral-900">Custom Quote</span>
+                    <span className="text-xl font-bold text-neutral-900 leading-tight">Custom Quote</span>
                   ) : (
                     <div className="space-y-0.5">
                       <div className="flex items-baseline gap-1">
@@ -398,7 +461,7 @@ export default function AdminPricingManagement() {
                   )}
                 </div>
 
-                <ul className="space-y-2.5 pt-4 border-t border-neutral-100">
+                <ul className="space-y-2.5 pt-3 mt-3 border-t border-neutral-100 flex-1">
                   {p.features?.map((f: string, i: number) => (
                     <li key={i} className="text-xs text-neutral-600 font-medium flex items-start space-x-1.5">
                       <i className="bx bx-check text-amber-600 text-sm mt-0.5 flex-shrink-0"></i>
@@ -408,20 +471,23 @@ export default function AdminPricingManagement() {
                 </ul>
               </div>
 
-              <div>
-                {p.bottomFeatures && p.bottomFeatures.length > 0 && (
-                  <div className="border-t border-neutral-100 pt-3 mt-4 text-left">
-                    {p.bottomFeatures.map((bf: string, idx: number) => (
-                      <div key={idx} className="text-xs text-neutral-600 font-medium flex items-center justify-start gap-1.5 mt-1">
-                        <i className="bx bx-sync text-neutral-400 text-sm"></i>
+              {/* Bottom section (Revisions & Site Visits + Actions) */}
+              <div className="mt-4 pt-3 border-t border-neutral-100">
+                <div className="min-h-[44px] flex flex-col justify-center">
+                  {p.bottomFeatures && p.bottomFeatures.length > 0 ? (
+                    p.bottomFeatures.map((bf: string, idx: number) => (
+                      <div key={idx} className="text-xs text-neutral-600 font-medium flex items-center justify-start gap-1.5 py-0.5">
+                        <i className="bx bx-sync text-neutral-400 text-sm flex-shrink-0"></i>
                         <span>{bf}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <span className="text-xs text-neutral-400 italic">Standard deliverables</span>
+                  )}
+                </div>
 
                 {/* Admin Action Buttons */}
-                <div className="pt-4 mt-5 border-t border-neutral-100 grid grid-cols-2 gap-2">
+                <div className="pt-3 mt-2 border-t border-neutral-100 grid grid-cols-2 gap-2">
                   <button
                     onClick={() => startEditing(p)}
                     className="py-2 bg-neutral-50 hover:bg-neutral-100 text-neutral-800 font-semibold text-xs rounded-md border border-neutral-200 transition-all cursor-pointer flex items-center justify-center space-x-1 active:scale-[0.98]"
@@ -466,12 +532,12 @@ export default function AdminPricingManagement() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {addons.map((addon) => (
-            <div key={addon.id} className="border border-neutral-200 rounded-md p-4 bg-neutral-50/50 flex items-center justify-between">
-              <div className="space-y-0.5 min-w-0">
+            <div key={addon.id} className="border border-neutral-200 rounded-md p-4 bg-neutral-50/50 flex items-center justify-between min-h-[72px]">
+              <div className="space-y-0.5 min-w-0 pr-4">
                 <span className="text-sm font-semibold text-neutral-900 block truncate">{addon.name}</span>
                 <span className="text-xs text-neutral-500 block">{addon.description || 'Optional add-on service'}</span>
               </div>
-              <div className="text-right shrink-0 ml-3">
+              <div className="text-right shrink-0 ml-auto">
                 <span className="text-base font-bold text-amber-600 font-sans block">{addon.price_label}</span>
                 <span className="text-[10px] text-neutral-400 font-medium block">Add-on</span>
               </div>
@@ -649,6 +715,27 @@ export default function AdminPricingManagement() {
                   />
                 </div>
 
+                {/* Most Popular Toggle */}
+                <div className="flex items-center justify-between p-3 bg-amber-50/60 border border-amber-200/80 rounded-md">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-900 cursor-pointer">
+                      Set as "Most Popular"
+                    </label>
+                    <p className="text-[11px] text-neutral-500">
+                      Only one plan can be Most Popular at a time.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newPlan.isPopular}
+                      onChange={(e) => setNewPlan(prev => ({ ...prev, isPopular: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
+
                 <div className="pt-2 flex items-center justify-end space-x-2">
                   <button
                     type="button"
@@ -768,6 +855,27 @@ export default function AdminPricingManagement() {
                     placeholder="e.g. 3 Revisions, 2 Site Visits"
                     className="w-full px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 rounded-md text-xs focus:outline-none focus:bg-white focus:border-amber-500 transition-all font-medium"
                   />
+                </div>
+
+                {/* Most Popular Toggle */}
+                <div className="flex items-center justify-between p-3 bg-amber-50/60 border border-amber-200/80 rounded-md">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-900 cursor-pointer">
+                      Set as "Most Popular"
+                    </label>
+                    <p className="text-[11px] text-neutral-500">
+                      Only one plan can be Most Popular at a time.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editForm.isPopular}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, isPopular: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
                 </div>
 
                 <div className="pt-2 flex items-center justify-end space-x-2">

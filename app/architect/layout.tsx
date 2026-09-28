@@ -227,7 +227,7 @@ export default function ArchitectLayout({ children }: { children: React.ReactNod
 
       {/* Reusable Sidebar Component */}
       <Sidebar
-        workspaceTitle="LightMap"
+        workspaceTitle="Lightmaps"
         workspaceSubtitle="Architect Workspace"
         workspaceIcon="bx bxs-paint"
         navItems={navItems}
@@ -253,6 +253,7 @@ export default function ArchitectLayout({ children }: { children: React.ReactNod
           setNotifications={setNotifications}
           handleSignOut={handleSignOut}
           notificationsBasePath="/architect/notifications"
+          profileHref="/architect/profile"
           showQuickSearch={true}
         />
 

@@ -109,6 +109,7 @@ export default function AdminProjectCreationWizard() {
   const [assignedArchitectId, setAssignedArchitectId] = useState('');
   const [assignedDesignerId, setAssignedDesignerId] = useState('');
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+  const [addonsList, setAddonsList] = useState<any[]>(ADDONS_DATA);
 
   const [projectDetails, setProjectDetails] = useState({
     projectName: '',
@@ -139,42 +140,66 @@ export default function AdminProjectCreationWizard() {
           .from('pricing_plans')
           .select('*')
           .eq('is_active', true)
+          .order('sort_order', { ascending: true, nullsFirst: false })
           .order('min_sq_ft', { ascending: true });
 
         if (plansError) throw plansError;
         setPlans(plansData || []);
 
         if (plansData && plansData.length > 0) {
-          const dbNames = new Set(plansData.map((d: any) => d.name.toLowerCase()));
-
           const mappedUiPlans = plansData.map((d: any) => {
             const defaultMatch = UI_PLANS.find(p => p.name.toLowerCase() === d.name.toLowerCase() || p.id === d.id);
-            const priceNum = Number(d.base_price_per_sq_ft);
-            const bottomFeatures = defaultMatch?.bottomFeatures || ['1 Revision'];
+            const priceNum = Number(d.base_price_per_sq_ft || d.flat_price || 0);
+            const bottomFeatures = (Array.isArray(d.bottom_features) && d.bottom_features.length > 0)
+              ? d.bottom_features
+              : (defaultMatch?.bottomFeatures || ['1 Revision']);
             const bottomSet = new Set(bottomFeatures.map((s: string) => s.toLowerCase()));
-            const featuresArr = (d.description
-              ? d.description.split(',').map((s: string) => s.trim()).filter(Boolean)
-              : (defaultMatch?.features || ['Lighting Layout'])
-            ).filter((f: string) => !bottomSet.has(f.toLowerCase()));
+            const featuresArr = (Array.isArray(d.features) && d.features.length > 0)
+              ? d.features
+              : (d.description
+                ? d.description.split(',').map((s: string) => s.trim()).filter(Boolean)
+                : (defaultMatch?.features || ['Lighting Layout'])
+              ).filter((f: string) => !bottomSet.has(f.toLowerCase()));
 
-            const isCustomQuote = priceNum === 0 || d.base_price_per_sq_ft === null;
+            const isCustomQuote = d.is_custom_quote || (priceNum === 0 && !d.flat_price) || d.base_price_per_sq_ft === null;
 
             return {
-              id: d.id, // Real DB UUID or key
+              id: d.id, // Real DB UUID
               name: d.name,
-              sqft: defaultMatch?.sqft || (d.min_sq_ft ? `MIN ${Number(d.min_sq_ft).toLocaleString()} SQ.FT.` : 'CUSTOM AREA'),
-              discount: isCustomQuote ? undefined : (defaultMatch?.discount || '50% off'),
-              popular: defaultMatch?.popular || false,
+              sqft: d.sqft_label || defaultMatch?.sqft || (d.min_sq_ft ? `MIN ${Number(d.min_sq_ft).toLocaleString()} SQ.FT.` : 'CUSTOM AREA'),
+              discount: isCustomQuote ? undefined : (d.discount_tag || defaultMatch?.discount || '50% off'),
+              popular: Boolean(d.is_popular),
               price: priceNum > 0 ? priceNum : (defaultMatch?.price || null),
-              originalPrice: defaultMatch?.originalPrice || (priceNum > 0 ? priceNum * 2 : null),
+              originalPrice: d.original_price ? Number(d.original_price) : (defaultMatch?.originalPrice || (priceNum > 0 ? priceNum * 2 : null)),
               customQuote: isCustomQuote,
               features: featuresArr,
               bottomFeatures,
             };
           });
 
-          const missingDefaults = UI_PLANS.filter(p => !dbNames.has(p.name.toLowerCase()));
-          setUiPlans([...mappedUiPlans, ...missingDefaults]);
+          setUiPlans(mappedUiPlans);
+        }
+
+        // Fetch dynamic addons
+        const { data: addonsData, error: addonsError } = await supabase
+          .from('pricing_addons')
+          .select('id, name, description, price, price_label')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: true });
+
+        if (!addonsError && addonsData && addonsData.length > 0) {
+          const mappedAddons = addonsData.map((d: any) => {
+            const numPrice = Number(d.price) || (d.price_label ? parseFloat(d.price_label.replace(/[^0-9.]/g, '')) : 0) || 0;
+            return {
+              id: d.id,
+              name: d.name,
+              description: d.description || (d.name.toLowerCase().includes('3d') ? 'Photorealistic 3D render of lighting design' : 'On-site consultation with our lighting expert'),
+              price: numPrice,
+              priceLabel: d.price_label || `₹${numPrice.toLocaleString('en-IN')}`,
+            };
+          });
+          setAddonsList(mappedAddons);
         }
 
         // Fetch architects
@@ -251,7 +276,7 @@ export default function AdminProjectCreationWizard() {
     if (!plan || plan.customQuote) return 0;
     const planPrice = plan.price || 0;
     const addonsPrice = selectedAddons.reduce((sum, addonId) => {
-      const addon = ADDONS_DATA.find(a => a.id === addonId);
+      const addon = addonsList.find(a => a.id === addonId);
       return sum + (addon ? addon.price : 0);
     }, 0);
     return planPrice + addonsPrice;
@@ -496,8 +521,14 @@ export default function AdminProjectCreationWizard() {
                   <p className="text-sm text-neutral-450 mt-0.5">Select a plan based on your project size. Pricing is auto-calculated — no negotiations.</p>
                 </div>
 
-                {/* 4 Columns Grid of Pricing Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+                {/* Dynamic Columns Grid of Pricing Cards */}
+                <div className={`grid ${
+                  uiPlans.length <= 1 ? 'grid-cols-1 max-w-md' :
+                  uiPlans.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-3xl' :
+                  uiPlans.length === 3 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' :
+                  uiPlans.length === 4 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' :
+                  'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+                } gap-4 lg:gap-5 mt-6`}>
                   {uiPlans.map((p) => {
                     const isSelected = selectedPlanId === p.id;
                     return (
@@ -588,7 +619,7 @@ export default function AdminProjectCreationWizard() {
                     <p className="text-sm text-neutral-450 mt-0.5">Optional services to enhance your project delivery.</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {ADDONS_DATA.map((addon) => {
+                    {addonsList.map((addon) => {
                       const isChecked = selectedAddons.includes(addon.id);
                       return (
                         <div
@@ -603,12 +634,12 @@ export default function AdminProjectCreationWizard() {
                             <div>
                               <span className="text-sm font-medium text-neutral-700 block">{addon.name}</span>
                               <span className="text-sm text-neutral-400 mt-0.5 block">
-                                {addon.id === '3d_vis' ? 'Photorealistic 3D render of lighting design' : 'On-site consultation with our lighting expert'}
+                                {addon.description}
                               </span>
                             </div>
                           </div>
                           <span className="text-sm font-medium text-amber-600">
-                            +₹{addon.price.toLocaleString()}
+                            +{addon.priceLabel || `₹${addon.price.toLocaleString('en-IN')}`}
                           </span>
                         </div>
                       );
@@ -1044,11 +1075,11 @@ export default function AdminProjectCreationWizard() {
                     <span className="text-sm text-neutral-455 font-medium block">Add-ons Selected</span>
                     <div className="space-y-1.5">
                       {selectedAddons.map(id => {
-                        const item = ADDONS_DATA.find(a => a.id === id);
+                        const item = addonsList.find(a => a.id === id);
                         return (
                           <div key={id} className="flex justify-between items-center text-sm bg-white/5 px-2.5 py-1.5 rounded-md border border-white/10">
                             <span className="text-neutral-300 font-medium">{item?.name}</span>
-                            <span className="text-neutral-200 font-medium">₹{item?.price.toLocaleString()}</span>
+                            <span className="text-neutral-200 font-medium">₹{item?.price.toLocaleString('en-IN')}</span>
                           </div>
                         );
                       })}
@@ -1066,7 +1097,7 @@ export default function AdminProjectCreationWizard() {
                   {selectedAddons.length > 0 && (
                     <div className="flex justify-between text-neutral-450">
                       <span>Add-ons Subtotal:</span>
-                      <span>₹{selectedAddons.reduce((sum, id) => sum + (ADDONS_DATA.find(a => a.id === id)?.price || 0), 0).toLocaleString()}</span>
+                      <span>₹{selectedAddons.reduce((sum, id) => sum + (addonsList.find(a => a.id === id)?.price || 0), 0).toLocaleString('en-IN')}</span>
                     </div>
                   )}
 
