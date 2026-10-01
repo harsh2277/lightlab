@@ -64,6 +64,10 @@ export default function ArchitectPaymentsPage() {
         throw new Error(orderData.error || 'Failed to initialize payment gateway.');
       }
 
+      const logoUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/new-logo.png`
+        : '/new-logo.png';
+
       const options = {
         key: orderData.keyId,
         order_id: orderData.orderId,
@@ -71,6 +75,7 @@ export default function ArchitectPaymentsPage() {
         currency: "INR",
         name: "Lightmaps",
         description: `Payment for Invoice #${pay.invoice_number}`,
+        image: logoUrl,
         handler: async function (response: any) {
           try {
             const verifyRes = await fetch('/api/payments/razorpay/verify', {

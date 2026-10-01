@@ -60,19 +60,7 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Enforce "Payment Pending - do not process further"
-    const { data: currentProject } = await adminClient
-      .from('projects')
-      .select('payment_status')
-      .eq('id', projectId)
-      .maybeSingle();
 
-    if (currentProject && currentProject.payment_status !== 'paid') {
-      return Response.json(
-        { error: 'Payment Pending - do not process further. Project payment must be verified before updating status.' },
-        { status: 400 }
-      );
-    }
 
     let updatedProject: any = null;
 

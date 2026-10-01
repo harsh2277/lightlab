@@ -306,7 +306,7 @@ export default function ArchitectProjectCreationWizard() {
     );
   };
 
-  const saveProject = async (isPaid: boolean, bypassRedirect = false) => {
+  const saveProject = async (isPaid: boolean, bypassRedirect = false, transactionId?: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User session not found.');
@@ -331,7 +331,7 @@ export default function ArchitectProjectCreationWizard() {
           pricing_plan_id: getDbPlanId(),
           calculated_price: totalCost,
           payment_status: isPaid ? 'paid' : 'pending',
-          status: 'Submitted',
+          status: isPaid ? 'Under Review' : 'Submitted',
           client_username: clientUsername,
           client_password_hash: generateClientPassword(),
         })
@@ -386,7 +386,7 @@ export default function ArchitectProjectCreationWizard() {
           project_id: project.id,
           amount: totalCost,
           status: isPaid ? 'completed' : 'pending',
-          transaction_id: isPaid ? `manual_${Date.now()}` : null,
+          transaction_id: isPaid ? (transactionId || `manual_${Date.now()}`) : null,
           invoice_number: `INV-${year}-${invoiceCode}`,
         })
         .select()
@@ -417,13 +417,6 @@ export default function ArchitectProjectCreationWizard() {
     setSubmitting(true);
     setErrorMsg('');
 
-    let project: any;
-    try {
-      project = await saveProject(false, true);
-    } catch (err) {
-      return;
-    }
-
     const totalCost = calculateGrandTotal();
     const chargeAmount = totalCost;
 
@@ -452,7 +445,13 @@ export default function ArchitectProjectCreationWizard() {
       const orderRes = await fetch('/api/payments/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, paymentId: project.paymentId }),
+        body: JSON.stringify({
+          isNewProject: true,
+          pricingPlanId: getDbPlanId(),
+          selectedAddonIds: selectedAddons,
+          areaSqFt: Number(projectDetails.areaSqFt) || 0,
+          projectName: projectDetails.projectName,
+        }),
       });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error || 'Failed to initialize payment');
@@ -466,15 +465,25 @@ export default function ArchitectProjectCreationWizard() {
       return;
     }
 
+    const logoUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/new-logo.png`
+      : '/new-logo.png';
+
     const options = {
       key: keyId,
       order_id: orderId,
       amount: chargeAmount * 100, // in paise
       currency: "INR",
       name: "Lightmaps",
-      description: `Grand Total for ${project.project_name}`,
+      description: `Grand Total for ${projectDetails.projectName}`,
+      image: logoUrl,
       handler: async function (response: any) {
         try {
+          setSubmitting(true);
+          // 1. Only create the project AFTER payment has succeeded!
+          const project = await saveProject(true, true, response.razorpay_payment_id);
+
+          // 2. Verify payment on server
           const verifyRes = await fetch('/api/payments/razorpay/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -492,12 +501,12 @@ export default function ArchitectProjectCreationWizard() {
             throw new Error(verifyData.error || 'Payment verification failed');
           }
 
-          toastSuccess('Payment verified successfully.');
+          toastSuccess('Payment verified and project created successfully.');
           router.push(`/architect/payments/success?project_id=${project.id}&amount=${chargeAmount}&transaction_id=${response.razorpay_payment_id}`);
-        } catch (err) {
-          console.error("Error verifying payment:", err);
-          toastError('Payment verification failed.');
-          router.push(`/architect/payments/failed?project_id=${project.id}&amount=${chargeAmount}`);
+        } catch (err: any) {
+          console.error("Error finalizing project:", err);
+          toastError(err.message || 'Payment processing failed.');
+          setSubmitting(false);
         }
       },
       prefill: {
@@ -509,8 +518,9 @@ export default function ArchitectProjectCreationWizard() {
       },
       modal: {
         ondismiss: function () {
-          // If dismissed/cancelled, redirect to failure page!
-          router.push(`/architect/payments/failed?project_id=${project.id}&amount=${totalCost}`);
+          // If dismissed/cancelled, DO NOT create the project!
+          setSubmitting(false);
+          toastError('Payment was cancelled. Project was not created.');
         }
       }
     };
@@ -1186,7 +1196,7 @@ export default function ArchitectProjectCreationWizard() {
       {showPaymentModal && (
         <Portal>
           <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
-            <div className="bg-white border border-neutral-200 rounded-md max-w-md w-full p-6 space-y-6">
+            <div className="bg-white border border-neutral-200 rounded-md max-w-xl w-full p-6 space-y-6">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center flex-shrink-0 border border-amber-100">
                   <i className="bx bx-credit-card-front text-xl"></i>
@@ -1229,28 +1239,39 @@ export default function ArchitectProjectCreationWizard() {
                 )}
               </div>
 
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-1">
                 <button
-                  onClick={async () => {
-                    setShowPaymentModal(false);
-                    setSubmitting(true);
-                    await saveProject(false);
-                  }}
+                  onClick={() => setShowPaymentModal(false)}
                   disabled={submitting}
-                  className="px-4 py-2.5 bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-700 font-medium text-sm rounded-md transition-colors flex items-center justify-center space-x-1.5"
+                  className="px-4 py-2.5 bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-700 font-medium text-sm rounded-md transition-colors flex items-center justify-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
                 >
-                  <i className="bx bx-time text-sm"></i>
-                  <span>No, Pay Later</span>
+                  <i className="bx bx-x text-sm"></i>
+                  <span className="whitespace-nowrap">Cancel & Review</span>
                 </button>
 
-                <button
-                  onClick={handleRazorpayCheckout}
-                  disabled={submitting}
-                  className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm rounded-md transition-colors flex items-center justify-center space-x-1.5 cursor-pointer"
-                >
-                  <i className="bx bx-check-circle text-sm"></i>
-                  <span>Pay Grand Total Now</span>
-                </button>
+                {selectedPlan?.customQuote ? (
+                  <button
+                    onClick={async () => {
+                      setShowPaymentModal(false);
+                      setSubmitting(true);
+                      await saveProject(false);
+                    }}
+                    disabled={submitting}
+                    className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm rounded-md transition-colors flex items-center justify-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <i className="bx bx-check-circle text-sm"></i>
+                    <span className="whitespace-nowrap">Submit for Custom Quote</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleRazorpayCheckout}
+                    disabled={submitting}
+                    className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm rounded-md transition-colors flex items-center justify-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <i className="bx bx-check-circle text-sm"></i>
+                    <span className="whitespace-nowrap">Pay Grand Total (₹{Math.round(calculateTotalPrice() * 1.18).toLocaleString()}) Now</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

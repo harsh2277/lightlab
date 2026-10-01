@@ -31,7 +31,84 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { projectId, paymentId } = await request.json();
+    const body = await request.json();
+
+    if (body.isNewProject) {
+      const { pricingPlanId, selectedAddonIds, projectName } = body;
+      if (!pricingPlanId) {
+        return NextResponse.json({ error: 'pricingPlanId is required' }, { status: 400 });
+      }
+
+      // Fetch pricing plan
+      const { data: plan } = await adminClient
+        .from('pricing_plans')
+        .select('*')
+        .eq('id', pricingPlanId)
+        .maybeSingle();
+
+      let planPrice = 0;
+      if (plan) {
+        planPrice = Number(plan.base_price_per_sq_ft || plan.flat_price || 0);
+      } else {
+        const staticPrices: Record<string, number> = {
+          essential: 4999,
+          professional: 9999,
+          premium: 24999,
+        };
+        planPrice = staticPrices[pricingPlanId] || 9999;
+      }
+
+      // Fetch addons if any
+      let addonsPrice = 0;
+      if (Array.isArray(selectedAddonIds) && selectedAddonIds.length > 0) {
+        const { data: addons } = await adminClient
+          .from('pricing_addons')
+          .select('id, price')
+          .in('id', selectedAddonIds);
+        if (addons && addons.length > 0) {
+          addonsPrice = addons.reduce((sum: number, a: any) => sum + Number(a.price || 0), 0);
+        } else {
+          const staticAddonPrices: Record<string, number> = {
+            '3d_vis': 5000,
+            'site_visit': 2500,
+          };
+          addonsPrice = selectedAddonIds.reduce((sum: number, id: string) => sum + (staticAddonPrices[id] || 0), 0);
+        }
+      }
+
+      const subtotal = planPrice + addonsPrice;
+      const grandTotal = Math.round(subtotal * 1.18);
+      const amountInPaise = Math.round(grandTotal * 100);
+
+      const res = await fetch('https://api.razorpay.com/v1/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Basic ' + Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64'),
+        },
+        body: JSON.stringify({
+          amount: amountInPaise,
+          currency: 'INR',
+          receipt: `np_${user.id.replace(/-/g, '').slice(0, 15)}_${Date.now().toString(36)}`,
+          notes: {
+            userId: user.id,
+            isNewProject: 'true',
+            pricingPlanId,
+            projectName: (projectName || 'New Project').slice(0, 30),
+          },
+        }),
+      });
+
+      const order = await res.json();
+      if (!res.ok) {
+        console.error('[razorpay/create-order] Razorpay API error:', order);
+        return NextResponse.json({ error: order?.error?.description || 'Failed to create payment order' }, { status: 502 });
+      }
+
+      return NextResponse.json({ success: true, orderId: order.id, keyId: RAZORPAY_KEY_ID, amount: amountInPaise });
+    }
+
+    const { projectId, paymentId } = body;
     if (!projectId || !paymentId) {
       return NextResponse.json({ error: 'projectId and paymentId are required' }, { status: 400 });
     }

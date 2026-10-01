@@ -35,9 +35,26 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [showPaymentGateModal, setShowPaymentGateModal] = useState(false);
 
+  const copyClientLink = async () => {
+    let url = `${window.location.origin}/client/project/${id}`;
+    try {
+      const res = await fetch(`/api/client/link?projectId=${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token) {
+          url = `${window.location.origin}/client/project/${id}?token=${data.token}`;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not generate client link with token:', e);
+    }
+    await navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
   const steps = [
     { name: 'Submitted', statusKey: 'Submitted' },
-    { name: 'Payment Pending', statusKey: 'Payment Pending' },
     { name: 'Under Review', statusKey: 'Under Review' },
     { name: 'In Design', statusKey: 'In Design' },
     { name: 'Ready for Review', statusKey: 'Ready for Client Review' },
@@ -50,13 +67,12 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
     if (!project) return 0;
     switch (project.status) {
       case 'Submitted': return 0;
-      case 'Payment Pending': return 1;
-      case 'Under Review': return 2;
-      case 'In Design': return 3;
-      case 'Ready for Client Review': return 4;
-      case 'Revision Requested': return 5;
-      case 'Approved': return 6;
-      case 'Closed': return 7;
+      case 'Under Review': return 1;
+      case 'In Design': return 2;
+      case 'Ready for Client Review': return 3;
+      case 'Revision Requested': return 4;
+      case 'Approved': return 5;
+      case 'Closed': return 6;
       default: return 0;
     }
   };
@@ -235,6 +251,10 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
       return;
     }
 
+    const logoUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/new-logo.png`
+      : '/new-logo.png';
+
     const options = {
       key: keyId,
       order_id: orderId,
@@ -242,6 +262,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
       currency: "INR",
       name: "Lightmaps",
       description: `Payment for ${project?.project_name || 'Project'} (incl. 18% GST)`,
+      image: logoUrl,
       handler: async function (response: any) {
         try {
           const verifyRes = await fetch('/api/payments/razorpay/verify', {
@@ -324,6 +345,10 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
       return;
     }
 
+    const logoUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/new-logo.png`
+      : '/new-logo.png';
+
     const options = {
       key: keyId,
       order_id: orderId,
@@ -331,6 +356,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
       currency: "INR",
       name: "Lightmaps",
       description: `50% Final Release Payment for ${project?.project_name || 'Project'}`,
+      image: logoUrl,
       handler: async function (response: any) {
         try {
           const verifyRes = await fetch('/api/payments/razorpay/verify', {
@@ -413,12 +439,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
               <div className="flex items-center space-x-3">
                 <h2 className="text-lg font-semibold text-neutral-900 tracking-tight leading-tight">{project.project_name}</h2>
                 <button
-                  onClick={() => {
-                    const url = `${window.location.origin}/client/project/${id}`;
-                    navigator.clipboard.writeText(url);
-                    setCopiedLink(true);
-                    setTimeout(() => setCopiedLink(false), 2500);
-                  }}
+                  onClick={copyClientLink}
                   className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded text-[11px] font-bold flex items-center space-x-1 transition-all cursor-pointer shadow-xs"
                   title="Copy direct shareable approval link for end-homeowner"
                 >
@@ -557,12 +578,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
 
                         <div className="flex items-center space-x-2 shrink-0">
                           <button
-                            onClick={() => {
-                              const url = `${window.location.origin}/client/project/${id}`;
-                              navigator.clipboard.writeText(url);
-                              setCopiedLink(true);
-                              setTimeout(() => setCopiedLink(false), 2500);
-                            }}
+                            onClick={copyClientLink}
                             className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-neutral-950 rounded-md text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer"
                           >
                             <i className="bx bx-share-alt text-sm"></i>
@@ -1067,7 +1083,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
       </main>
 
       {/* Razorpay Checkout Modal Overlay */}
-      <Modal isOpen={checkoutOpen} onClose={() => setCheckoutOpen(false)} maxWidthClassName="max-w-md">
+      <Modal isOpen={checkoutOpen} onClose={() => setCheckoutOpen(false)} maxWidthClassName="max-w-lg">
           <div className="overflow-hidden p-6 space-y-6">
             <div className="flex justify-between items-start">
               <div>
@@ -1112,7 +1128,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
             <button
               onClick={handleMockPayment}
               disabled={isProcessingPayment}
-              className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+              className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer whitespace-nowrap"
             >
               {isProcessingPayment ? (
                 <>
@@ -1120,17 +1136,17 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  <span>Connecting to Razorpay...</span>
+                  <span className="whitespace-nowrap">Connecting to Razorpay...</span>
                 </>
               ) : (
-                <span>Pay Now with Razorpay</span>
+                <span className="whitespace-nowrap">Pay Now with Razorpay</span>
               )}
             </button>
           </div>
       </Modal>
 
       {/* Payment Gate Modal — shown when M2 balance is pending and architect tries to request a revision */}
-      <Modal isOpen={showPaymentGateModal && !!pendingBalancePayment} onClose={() => setShowPaymentGateModal(false)} maxWidthClassName="max-w-md">
+      <Modal isOpen={showPaymentGateModal && !!pendingBalancePayment} onClose={() => setShowPaymentGateModal(false)} maxWidthClassName="max-w-lg">
           <div className="overflow-hidden font-sans">
             {/* Top accent bar */}
             <div className="h-1 w-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500" />
@@ -1183,7 +1199,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
               <div className="flex items-center space-x-3 pt-1">
                 <button
                   onClick={() => setShowPaymentGateModal(false)}
-                  className="flex-1 py-2.5 bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 font-bold text-xs rounded-lg transition-all cursor-pointer"
+                  className="flex-1 py-2.5 bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 font-bold text-xs rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0"
                 >
                   Cancel
                 </button>
@@ -1193,7 +1209,7 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
                     handlePayMilestone2(pendingBalancePayment);
                   }}
                   disabled={isProcessingPayment}
-                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/20 cursor-pointer flex items-center justify-center space-x-1.5"
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/20 cursor-pointer flex items-center justify-center space-x-1.5 whitespace-nowrap shrink-0"
                 >
                   {isProcessingPayment ? (
                     <>
@@ -1201,12 +1217,12 @@ export default function ArchitectProjectDetail({ params }: PageProps) {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      <span>Processing...</span>
+                      <span className="whitespace-nowrap">Processing...</span>
                     </>
                   ) : (
                     <>
                       <i className="bx bx-credit-card text-sm"></i>
-                      <span>Pay ₹{Number(pendingBalancePayment?.amount || 0).toLocaleString('en-IN')} Now</span>
+                      <span className="whitespace-nowrap">Pay ₹{Number(pendingBalancePayment?.amount || 0).toLocaleString('en-IN')} Now</span>
                     </>
                   )}
                 </button>

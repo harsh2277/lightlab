@@ -108,7 +108,12 @@ export async function POST(request: Request) {
     const order = await orderRes.json();
     const expectedPaise = Math.round(Number(payment.amount) * 100);
 
-    if (!orderRes.ok || order.notes?.projectId !== projectId || order.notes?.paymentId !== paymentId || order.amount !== expectedPaise) {
+    const isNewProjectOrder = order.notes?.isNewProject === 'true';
+    const notesMatch = isNewProjectOrder
+      ? order.notes?.userId === user.id
+      : (order.notes?.projectId === projectId && order.notes?.paymentId === paymentId);
+
+    if (!orderRes.ok || !notesMatch || order.amount !== expectedPaise) {
       console.error('[razorpay/verify] Order/amount mismatch for payment', paymentId, order);
       return NextResponse.json({ error: 'Payment amount could not be verified' }, { status: 400 });
     }

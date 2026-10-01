@@ -1128,7 +1128,7 @@ export default function AdminProjectCreationWizard() {
       {showPaymentModal && (
         <Portal>
           <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-            <div className="bg-white border border-neutral-200 rounded-md max-w-md w-full p-6 space-y-6">
+            <div className="bg-white border border-neutral-200 rounded-md max-w-xl w-full p-6 space-y-6">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 bg-amber-55/10 text-amber-500 rounded-full flex items-center justify-center flex-shrink-0 border border-amber-100">
                   <i className="bx bx-credit-card-front text-xl"></i>
@@ -1155,18 +1155,14 @@ export default function AdminProjectCreationWizard() {
                 <span className="text-sm font-medium text-neutral-900">₹{calculateTotalPrice().toLocaleString()}</span>
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-1">
                 <button
-                  onClick={async () => {
-                    setShowPaymentModal(false);
-                    setSubmitting(true);
-                    await saveProject(false);
-                  }}
+                  onClick={() => setShowPaymentModal(false)}
                   disabled={submitting}
-                  className="px-4 py-2 bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-700 font-medium text-sm rounded-md transition-colors flex items-center justify-center space-x-1.5"
+                  className="px-4 py-2.5 bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-700 font-medium text-sm rounded-md transition-colors flex items-center justify-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
                 >
-                  <i className="bx bx-time text-sm"></i>
-                  <span>No, Pay Later</span>
+                  <i className="bx bx-x text-sm"></i>
+                  <span className="whitespace-nowrap">Cancel & Review</span>
                 </button>
 
                 <button
@@ -1176,10 +1172,10 @@ export default function AdminProjectCreationWizard() {
                     await saveProject(true);
                   }}
                   disabled={submitting}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm rounded-md transition-colors flex items-center justify-center space-x-1.5"
+                  className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm rounded-md transition-colors flex items-center justify-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
                 >
                   <i className="bx bx-check-circle text-sm"></i>
-                  <span>Yes, Payment Completed</span>
+                  <span className="whitespace-nowrap">Confirm & Create Project</span>
                 </button>
               </div>
             </div>

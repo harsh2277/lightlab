@@ -34,6 +34,9 @@ export default function ConfirmModal({
     if (isOpen) setIsProcessing(false);
   }, [isOpen]);
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   // Focus trap + ESC close
   useEffect(() => {
     if (!isOpen) return;
@@ -42,14 +45,14 @@ export default function ConfirmModal({
     const frame = requestAnimationFrame(() => cancelRef.current?.focus());
 
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', handleKey);
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener('keydown', handleKey);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

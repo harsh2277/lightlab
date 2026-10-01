@@ -31,6 +31,7 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
   const [clientNameInput, setClientNameInput] = useState('');
   const [approvalNoteInput, setApprovalNoteInput] = useState('');
   const [revisionNotesInput, setRevisionNotesInput] = useState('');
+  const [clientToken, setClientToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const toast = useToast();
 
@@ -39,50 +40,27 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
     try {
       setLoading(true);
 
-      const { data: proj, error: projError } = await supabase
-        .from('projects')
-        .select('*, pricing_plans(*)')
-        .eq('id', id)
-        .single();
-
-      if (projError) throw projError;
-      setProject(proj);
-      if (proj?.client_name) setClientNameInput(proj.client_name);
-
-      if (proj?.architect_id) {
-        const { data: arch } = await supabase
-          .from('profiles')
-          .select('name, email')
-          .eq('id', proj.architect_id)
-          .single();
-        setArchitectProfile(arch);
+      const res = await fetch(`/api/client/project/${id}`);
+      if (!res.ok) {
+        throw new Error('Project not found');
       }
 
-      const { data: prefs } = await supabase
-        .from('project_lighting_preferences')
-        .select('preference_name')
-        .eq('project_id', id);
-      setPreferences(prefs || []);
-
-      const { data: filesData } = await supabase
-        .from('project_files')
-        .select('*, profiles:uploaded_by(role)')
-        .eq('project_id', id);
-
-      if (filesData) {
-        setDeliverables(filesData.filter((f: any) => f.category === 'deliverable' || f.profiles?.role === 'designer'));
+      const data = await res.json();
+      if (!data.project) {
+        throw new Error('Project not found');
       }
 
-      // Read-only fetch of past client-submitted approval/feedback entries
-      const { data: revs } = await supabase
-        .from('revision_requests')
-        .select('*')
-        .eq('project_id', id)
-        .order('created_at', { ascending: false });
-      setFeedbackEntries((revs || []).filter((r: any) => r.description?.includes('CLIENT')));
+      setProject(data.project);
+      if (data.project?.client_name) setClientNameInput(data.project.client_name);
+      if (data.architectProfile) setArchitectProfile(data.architectProfile);
+      setPreferences(data.preferences || []);
+      setDeliverables(data.deliverables || []);
+      setFeedbackEntries(data.feedbackEntries || []);
+      if (data.token) setClientToken(data.token);
 
     } catch (err: any) {
       console.error('Error loading client project portal:', err);
+      setProject(null);
     } finally {
       setLoading(false);
     }
@@ -116,9 +94,19 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
     return supabase.storage.from('project-assets').getPublicUrl(filePath).data.publicUrl;
   };
 
+  const getActiveToken = () => {
+    if (clientToken) return clientToken;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('token') || '';
+    }
+    return '';
+  };
+
   const handleApproveDesign = async () => {
     setIsSubmitting(true);
     try {
+      const token = getActiveToken();
       const res = await fetch('/api/client/approval', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,7 +114,8 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
           projectId: id,
           action: 'approve',
           clientName: clientNameInput || project?.client_name || 'Homeowner',
-          feedbackNotes: approvalNoteInput
+          feedbackNotes: approvalNoteInput,
+          token
         })
       });
       const data = await res.json();
@@ -162,17 +151,13 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
   };
 
   const handleRequestRevision = async () => {
-    if ((project?.payment_status || 'pending') !== 'paid') {
-      toast.error('Payment Pending - do not process further. Revisions will proceed once payment is confirmed.');
-      return;
-    }
-
     if (!revisionNotesInput.trim()) {
       toast.error('Please enter the changes or instructions for the revision.');
       return;
     }
     setIsSubmitting(true);
     try {
+      const token = getActiveToken();
       const res = await fetch('/api/client/approval', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -180,7 +165,8 @@ export default function ClientProjectApprovalPage({ params }: PageProps) {
           projectId: id,
           action: 'feedback',
           clientName: clientNameInput || project?.client_name || 'Homeowner',
-          feedbackNotes: revisionNotesInput.trim()
+          feedbackNotes: revisionNotesInput.trim(),
+          token
         })
       });
       const data = await res.json();

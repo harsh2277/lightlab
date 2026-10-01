@@ -31,26 +31,44 @@ export default function Modal({
   closeOnBackdrop = true,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const hasFocusedRef = useRef(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (!hasFocusedRef.current) {
+        hasFocusedRef.current = true;
+        const frame = requestAnimationFrame(() => {
+          if (!panelRef.current?.contains(document.activeElement)) {
+            // Prioritize input or textarea first, then other focusable elements
+            const inputElement = panelRef.current?.querySelector<HTMLElement>(
+              'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])'
+            );
+            const fallbackElement = panelRef.current?.querySelector<HTMLElement>(
+              'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+            );
+            (inputElement || fallbackElement)?.focus();
+          }
+        });
+        return () => cancelAnimationFrame(frame);
+      }
+    } else {
+      hasFocusedRef.current = false;
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    const frame = requestAnimationFrame(() => {
-      const focusable = panelRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      focusable?.focus();
-    });
-
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', handleKey);
     return () => {
-      cancelAnimationFrame(frame);
       document.removeEventListener('keydown', handleKey);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

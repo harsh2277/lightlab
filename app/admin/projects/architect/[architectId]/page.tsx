@@ -73,7 +73,7 @@ export default function AdminArchitectProjectsList() {
   }, [architectId]);
 
   const statuses = [
-    'All', 'Submitted', 'Payment Pending', 'Under Review', 'In Design',
+    'All', 'Submitted', 'Under Review', 'In Design',
     'Ready for Client Review', 'Revision Requested', 'Approved', 'Closed'
   ];
 

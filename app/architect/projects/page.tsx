@@ -90,7 +90,7 @@ export default function ArchitectProjectsList() {
   };
 
   const statuses = [
-    'All', 'Submitted', 'Payment Pending', 'Under Review', 'In Design',
+    'All', 'Submitted', 'Under Review', 'In Design',
     'Ready for Client Review', 'Revision Requested', 'Approved', 'Closed'
   ];
 

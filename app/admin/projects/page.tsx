@@ -116,7 +116,7 @@ function AdminProjectsList() {
   };
 
   const statuses = [
-    'All', 'Submitted', 'Payment Pending', 'Under Review', 'In Design',
+    'All', 'Submitted', 'Under Review', 'In Design',
     'Ready for Client Review', 'Revision Requested', 'Approved', 'Closed'
   ];
 
@@ -154,7 +154,7 @@ function AdminProjectsList() {
       {/* Title block */}
       <div className="flex justify-between items-center print:hidden">
         <div>
-          <h2 className="text-xl font-medium text-neutral-900 font-sans">Projects</h2>
+          <h2 className="text-xl font-medium text-neutral-900 font-sans">Project Directory</h2>
           <p className="text-sm text-neutral-400 mt-0.5">Every project across every architect, in one list.</p>
         </div>
 

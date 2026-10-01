@@ -345,10 +345,90 @@ When you want to add something new to this project, follow this simple checklist
 
 ---
 
-### [2026-09-28] - Project Documentation Created
-- **What was changed**: Created the central `PROJECT_GUIDE.md` file.
-- **Why**: To provide a clean, easy-to-read overview of all folders, user roles, project flow, and instructions for team members.
+### [2026-10-01] - Client Portal Approval, Mobile Presentation Link & Pay Now Flow Fixes
+- **What was changed**:
+  1. **Removed "Pay Later" & "Payment Pending" Flow**:
+     - Removed the "No, Pay Later" button from the Architect project creation wizard (`app/architect/projects/create/page.tsx`) and Admin project creation modal (`app/admin/projects/create/page.tsx`). Projects can no longer be created in an unpaid state from the wizard. Architect wizard now shows "Pay Grand Total Now" (or "Submit for Custom Quote") and "Cancel & Review".
+     - Removed the confusing "Payment Pending" tab from project listing filters across Architect, Designer, and Admin portals.
+     - Removed artificial "Payment Pending - do not process further" blocks and warning banners that prevented designers from uploading deliverables or progressing project workflows.
+  2. **Fixed Client Approval Token Verification Bug ("Invalid or missing access token")**:
+     - Client review portal (`app/client/project/[id]/page.tsx`) now retrieves and passes the secure project token when submitting design approval or revision requests to `/api/client/approval`.
+     - Updated `/api/client/approval/route.ts` to reliably verify tokens while supporting direct project approvals without false 403 rejections.
+  3. **Fixed Client Link "Project Not Found" on Mobile/WhatsApp**:
+     - Created a dedicated public server endpoint `GET /api/client/project/[id]` using `getSupabaseAdmin()`.
+     - When end-homeowners open the design presentation link on mobile phones or external browsers without a Lightmaps login session, Supabase Row-Level Security (RLS) no longer blocks the project data. Homeowners can now seamlessly view drawings, 3D renders, lux simulations, and BOQs directly from WhatsApp links.
+     - Updated Architect project view (`Share with Client` and `Copy Shareable Link` buttons) to fetch and append signed tokens (`?token=...`) to the copied links.
+  4. **Fixed Text Box Typing Bug in Modals ("Unable to write in the text box")**:
+     - Fixed focus theft bug in `components/ui/Modal.tsx` and `components/ui/ConfirmModal.tsx`. Previously, inline `onClose` function references caused the modal `useEffect` to trigger on every keystroke, stealing focus away from the input/textarea and focusing the close button. Stabilized `onClose` with a ref and ensured focus is only set once on initial modal open.
+- **Why**: Client reported 3 critical issues:
+  1. Remove "Pay Later" / "Payment Pending" flow completely in favor of "Pay Now".
+  2. Client approval failed with "Invalid or missing access token" and users were unable to type in the approval note text box.
+  3. End-homeowner presentation links failed with "Project Not Found" when opened from WhatsApp on mobile devices.
 - **Files touched**:
+  - `components/ui/Modal.tsx`
+  - `components/ui/ConfirmModal.tsx`
+  - `app/api/client/project/[id]/route.ts`
+  - `app/api/client/approval/route.ts`
+  - `app/client/project/[id]/page.tsx`
+  - `app/architect/projects/[id]/page.tsx`
+  - `app/architect/projects/create/page.tsx`
+  - `app/admin/projects/create/page.tsx`
+  - `app/architect/projects/page.tsx`
+  - `app/designer/projects/page.tsx`
+  - `app/admin/projects/page.tsx`
+  - `app/admin/projects/[id]/page.tsx`
+  - `app/admin/projects/architect/[architectId]/page.tsx`
+  - `app/designer/projects/[id]/page.tsx`
+  - `app/api/admin/projects/assign/route.ts`
+  - `app/api/designer/projects/route.ts`
+  - `app/api/designer/projects/[id]/upload/route.ts`
+  - `PROJECT_GUIDE.md`
+- **Author**: Lightmaps Team
+
+---
+
+### Razorpay Brand Logo & Payment Modal Single-Line Button Optimization (2026-10-01)
+- **What**:
+  1. **Branded Razorpay Checkout**:
+     - Configured the official logo (`public/new-logo.png`) into the Razorpay checkout `image` option across all payment flows:
+       - Project creation checkout (`app/architect/projects/create/page.tsx`)
+       - Project detail full payment checkout (`app/architect/projects/[id]/page.tsx`)
+       - Project detail milestone 2 balance payment (`app/architect/projects/[id]/page.tsx`)
+       - Financial invoices settlement modal (`app/architect/payments/page.tsx`)
+     - Replaces Razorpay's default orange initial letter box ("L") with the Lightmaps brand logo.
+  2. **Payment Confirmation Modal Width & Button Text Fix**:
+     - Expanded the payment verification pop-up container width from `max-w-md` (448px) to `max-w-xl` (576px) in `app/architect/projects/create/page.tsx` and `app/admin/projects/create/page.tsx`.
+     - Added `whitespace-nowrap shrink-0` to the modal action buttons ("Pay Grand Total (₹XX,XXX) Now", "Submit for Custom Quote", "Cancel & Review", and "Confirm & Create Project") and their inner text spans.
+     - Also expanded the project detail secure checkout and milestone 2 payment gate modals to `max-w-lg` with `whitespace-nowrap` buttons.
+     - Prevents any line-breaks or awkward text wrapping inside payment action buttons, ensuring a clean single-line presentation.
+- **Why**:
+  - The Razorpay checkout dialog displayed a fallback generic "L" avatar rather than the brand logo (`new-logo.png`).
+  - In the project creation payment confirmation pop-up, the action button text (e.g., "Pay Grand Total (₹11,799) Now") wrapped into multiple lines due to constrained container width (`max-w-md`).
+- **Files touched**:
+  - `app/architect/projects/create/page.tsx`
+  - `app/admin/projects/create/page.tsx`
+  - `app/architect/projects/[id]/page.tsx`
+  - `app/architect/payments/page.tsx`
+  - `PROJECT_GUIDE.md`
+- **Author**: Lightmaps Team
+
+---
+
+### Prevent Project Creation on Cancelled Payment (2026-10-01)
+- **What**:
+  1. **Strict Post-Payment Project Creation**:
+     - Previously, clicking "Pay Grand Total Now" saved a preliminary project into Supabase before launching the Razorpay payment gateway. If the architect cancelled the Razorpay dialog or payment failed, the project had already been recorded in the database as a pending project and the user was redirected to a failure page indicating the project was saved as a draft.
+     - Refactored `handleRazorpayCheckout` in `app/architect/projects/create/page.tsx` so that **no project or payment rows are written to Supabase prior to payment**.
+     - Updated `/api/payments/razorpay/create-order` to accept `isNewProject: true` and calculate the required order amount server-side based on the selected plan tier and addons without requiring pre-existing project or payment rows in the database.
+     - Updated `/api/payments/razorpay/verify` to reconcile and verify new project orders.
+     - When payment succeeds, `saveProject(true, true, transactionId)` creates the project directly with `payment_status: 'paid'` and `status: 'Under Review'`, settles the payment, verifies the signature, and routes to the success screen.
+     - When the architect cancels or dismisses the Razorpay checkout modal (`modal.ondismiss`), **no project is created in the database**. The architect remains on the project creation wizard with all inputs intact, and a notification indicates that payment was cancelled and the project was not created.
+- **Why**:
+  - Client reported that if payment is cancelled, the project was still being created. Unpaid projects must not be created when payment is cancelled or abandoned.
+- **Files touched**:
+  - `app/architect/projects/create/page.tsx`
+  - `app/api/payments/razorpay/create-order/route.ts`
+  - `app/api/payments/razorpay/verify/route.ts`
   - `PROJECT_GUIDE.md`
 - **Author**: Lightmaps Team
 
